@@ -1,0 +1,64 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+}
+
+#container {
+  display: flex;
+  height: 100vh;
+}
+
+canvas {
+  border: 1px solid #ccc;
+  background: #fff;
+  flex: 1;
+}
+
+#chat-container {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid #ccc;
+  padding: 10px;
+  box-sizing: border-box;
+  background: #ffffff;
+}
+
+#playerCount {
+  font-weight: bold;
+  margin-bottom: 10px;
+}
+
+#changeNameButton {
+  margin-bottom: 10px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+#messages {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid #ccc;
+  padding: 5px;
+  margin-bottom: 5px;
+  background: #fff;
+}
+
+.message {
+  margin: 2px 0;
+}
+
+#messageInput {
+  padding: 8px;
+  border: 1px solid #ccc;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.typing {
+  font-style: italic;
+  color: gray;
+  font-size: 0.8em;
+  margin-top: 3px;
+}

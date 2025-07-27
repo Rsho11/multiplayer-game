@@ -1,0 +1,135 @@
+/* Common styles for the dream‑themed game */
+body {
+  margin: 0;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #0a0d13;
+  color: #f5f5f5;
+}
+
+h1 {
+  text-align: center;
+  padding: 10px;
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 1px;
+  color: #e6cde6;
+}
+
+#container {
+  display: flex;
+  flex-direction: row;
+  height: calc(100vh - 60px);
+  width: 100%;
+}
+
+/* Sidebar for lobby and field info */
+#sidebar {
+  width: 250px;
+  background: rgba(30, 30, 40, 0.9);
+  padding: 15px;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+#sidebar h2 {
+  margin-top: 0;
+  margin-bottom: 5px;
+  font-size: 16px;
+  color: #b0a6c8;
+}
+
+#playerList,
+#abilitiesList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px 0;
+}
+
+#playerList li,
+#abilitiesList li {
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+#npc {
+  margin-bottom: 10px;
+  font-style: italic;
+  color: #8e83a9;
+}
+
+#npc p {
+  margin: 0;
+}
+
+button {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-top: 10px;
+  border: none;
+  border-radius: 4px;
+  background: #63568c;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #7863a0;
+}
+
+/* Chat area */
+#chatArea {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 15px;
+  box-sizing: border-box;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 10px;
+  padding-right: 10px;
+}
+
+.messages div {
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+#messageInput {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #444;
+  border-radius: 4px;
+  background: #1b1d2b;
+  color: #f5f5f5;
+  margin-bottom: 5px;
+}
+
+#typingIndicator {
+  font-size: 12px;
+  color: #888;
+  height: 14px;
+}
+
+/* Canvas for the field */
+canvas {
+  background: linear-gradient(135deg, #2b2f3f 0%, #171a29 100%);
+  border: 2px solid #3e3f56;
+  border-radius: 6px;
+  margin-right: 10px;
+}
+
+/* Lobby specific adjustments */
+body.lobby #container {
+  flex-direction: row;
+}
+
+/* Field specific adjustments */
+body.field #container {
+  flex-direction: row;
+}

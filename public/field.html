@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Knitting in the Dark - Open Field</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="field">
+  <h1>The Open Field</h1>
+  <div id="container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <aside id="sidebar">
+      <div id="abilitiesInfo">
+        <h2>Your Abilities</h2>
+        <ul id="abilitiesList"></ul>
+      </div>
+      <div id="playerInfo">
+        <h2>Players (<span id="playerCount">0</span>/10)</h2>
+        <ul id="playerList"></ul>
+      </div>
+      <div id="npc">
+        <p><strong>Knitting Girl:</strong> <span id="npcQuote">Welcome to the dream...</span></p>
+      </div>
+    </aside>
+    <main id="chatArea">
+      <div id="messages" class="messages"></div>
+      <input id="messageInput" type="text" placeholder="Type a message or an ability..." autocomplete="off" />
+      <div id="typingIndicator" class="typing"></div>
+    </main>
+  </div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

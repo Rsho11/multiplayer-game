@@ -4,39 +4,20 @@
 <head>
   <meta charset="UTF-8" />
   <title>Knitting in the Dark</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
 </head>
-<body class="lobby">
-  <h1>Knitting in the Dark</h1>
-  <div id="container">
-    <aside id="sidebar">
-      <div id="npc">
-        <p><strong>Knitting Girl:</strong> <span id="npcQuote">Shhh... I'm crafting something...</span></p>
-      </div>
-      <div id="playerInfo">
-        <h2>Players (<span id="playerCount">0</span>/10)</h2>
-        <ul id="playerList"></ul>
-      </div>
-      <div id="abilitiesInfo">
-        <h2>Your Abilities</h2>
-        <ul id="abilitiesList"></ul>
-      </div>
-      <button id="changeNameButton">Change Name</button>
-      <button id="enterDreamButton">Enter Dream</button>
-    </aside>
-    <main id="chatArea">
-      <div id="messages" class="messages"></div>
-      <input id="messageInput" type="text" placeholder="Type a message..." autocomplete="off" />
-      <div id="typingIndicator" class="typing"></div>
-    </main>
-  </div>
+<body>
+  <main id="waitingRoom">
+    <h1>Knitting in the Dark</h1>
+    <p>The knitting girl hums near the oven...</p>
+    <button id="changeName">Change Name</button>
+    <button id="enterDream">Focus & Descend</button>
+    <ul id="playerList"></ul>
+    <div id="messages"></div>
+    <input type="text" id="chatInput" placeholder="Type a message..." />
+  </main>
 
-  <div id="dreamFieldView" style="display:none">
-    <h2>🌌 Dream Field</h2>
-    <canvas id="gameCanvas" width="800" height="400" style="background: #000; display: block; margin: 10px auto;"></canvas>
-    <input id="messageInput" type="text" placeholder="Type a word to chat or unlock ability" autocomplete="off" />
-    <button id="exitDreamButton">Return to Lobby</button>
-  </div>
+  <canvas id="spiralCanvas" width="800" height="600" style="display: none;"></canvas>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>

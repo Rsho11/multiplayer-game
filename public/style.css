@@ -1,41 +1,9 @@
 
 body {
-  margin: 0;
-  font-family: monospace;
-  background-color: #1a1a1a;
-  color: #f0e6d2;
-  padding: 20px;
+  background-color: #0f0f0f;
+  color: #e0e0e0;
+  font-family: sans-serif;
 }
-#container {
-  display: flex;
-}
-#sidebar {
-  width: 250px;
-  background-color: #2e2e2e;
-  padding: 10px;
-  border-right: 2px solid #444;
-}
-#chatArea {
-  flex: 1;
-  padding: 10px;
-}
-.messages {
-  height: 300px;
-  overflow-y: scroll;
-  background: #111;
-  padding: 10px;
+canvas {
   border: 1px solid #444;
-  margin-bottom: 10px;
-}
-.typing {
-  font-style: italic;
-  color: #ccc;
-}
-button {
-  padding: 5px 10px;
-  margin-top: 5px;
-  background-color: #444;
-  color: white;
-  border: none;
-  cursor: pointer;
 }

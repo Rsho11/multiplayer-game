@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Knitting in the Dark - Lobby</title>
+  <title>Knitting in the Dark</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body class="lobby">
@@ -29,8 +30,14 @@
       <div id="typingIndicator" class="typing"></div>
     </main>
   </div>
-<div id="waitingRoomView"> ... </div>
-<div id="dreamFieldView" style="display:none"> ... </div>
+
+  <div id="dreamFieldView" style="display:none">
+    <h2>🌌 Dream Field</h2>
+    <canvas id="gameCanvas" width="800" height="400" style="background: #000; display: block; margin: 10px auto;"></canvas>
+    <input id="messageInput" type="text" placeholder="Type a word to chat or unlock ability" autocomplete="off" />
+    <button id="exitDreamButton">Return to Lobby</button>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>

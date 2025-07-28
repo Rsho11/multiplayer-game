@@ -190,8 +190,14 @@ socket.on('nameUpdated', ({ id, name }) => {
 socket.on('roomChanged', ({ id, room, player }) => {
   if (players[id]) {
     players[id] = player;
-    // If this is us and we moved to the dream, redirect handled in 'enteredDream'
-    if (id !== myId) {
+    if (id === myId) {
+      myPlayer = player;
+      if (room === 'OpenField' && !isField()) {
+        window.location.href = 'field.html';
+      } else if (room === 'WaitingRoom' && !isLobby()) {
+        window.location.href = 'index.html';
+      }
+    } else {
       updatePlayerList();
       drawPlayers();
     }
@@ -269,6 +275,14 @@ const enterDreamBtn = document.getElementById('enterDreamButton');
 if (enterDreamBtn) {
   enterDreamBtn.addEventListener('click', () => {
     socket.emit('enterDream');
+  });
+}
+
+// Exit Dream button
+const exitDreamBtn = document.getElementById('exitDreamButton');
+if (exitDreamBtn) {
+  exitDreamBtn.addEventListener('click', () => {
+    socket.emit('changeRoom', 'WaitingRoom');
   });
 }
 

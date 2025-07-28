@@ -1,144 +1,26 @@
-/*
- * Shared client logic for Knitting in the Dark.
- * Handles lobby (index.html) and dream field (field.html) pages.
- */
 
 const socket = io();
-
-// Track our own player id and state
 let myId = null;
 let myPlayer = null;
-
-// Map of all players (by id) in the same room
 const players = {};
-
-// Keep track of typing status timer
-let typingTimeout;
-
-// Utility to determine if we're on the lobby page
-function isLobby() {
-  return document.body.classList.contains('lobby');
-}
-
-// Utility to determine if we're on the dream field page
-function isField() {
-  return document.body.classList.contains('field');
-}
-
-// UI update: populate list of players
-function updatePlayerList() {
-  const list = document.getElementById('playerList');
-  if (!list) return;
-  list.innerHTML = '';
-  Object.keys(players).forEach((id) => {
-    const p = players[id];
-    const li = document.createElement('li');
-    li.style.color = p.color;
-    li.textContent = p.name;
-    list.appendChild(li);
-  });
-  const count = document.getElementById('playerCount');
-  if (count) {
-    count.textContent = Object.keys(players).length.toString();
-  }
-}
-
-// UI update: show our abilities
-function updateAbilitiesList() {
-  const ul = document.getElementById('abilitiesList');
-  if (!ul || !myPlayer) return;
-  ul.innerHTML = '';
-  myPlayer.abilities.forEach((abil) => {
-    const li = document.createElement('li');
-    li.textContent = abil;
-    ul.appendChild(li);
-  });
-}
-
-// Chat helper: append a message to the messages div
-function addChatMessage(text) {
-  const container = document.getElementById('messages');
-  if (!container) return;
-  const div = document.createElement('div');
-  div.textContent = text;
-  container.appendChild(div);
-  // Limit to last 100 messages
-  while (container.childNodes.length > 100) {
-    container.removeChild(container.firstChild);
-  }
-  container.scrollTop = container.scrollHeight;
-}
-
-// Typing indicator update
-const typingPlayers = {};
-function updateTypingIndicator() {
-  const indicator = document.getElementById('typingIndicator');
-  if (!indicator) return;
-  const names = Object.keys(typingPlayers)
-    .filter((id) => typingPlayers[id] && players[id])
-    .map((id) => players[id].name);
-  if (names.length > 0) {
-    indicator.textContent = `${names.join(', ')} ${
-      names.length > 1 ? 'are' : 'is'
-    } typing...`;
-  } else {
-    indicator.textContent = '';
-  }
-}
-
-// Draw players on canvas for dream field
-function drawPlayers() {
-  if (!isField()) return;
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  Object.keys(players).forEach((id) => {
-    const p = players[id];
-    // Only draw players in our room
-    if (p.currentRoom !== myPlayer.currentRoom) return;
-    ctx.fillStyle = p.color;
-    ctx.beginPath();
-    ctx.arc(p.position.x, p.position.y, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '12px sans-serif';
-    ctx.fillText(p.name, p.position.x - ctx.measureText(p.name).width / 2, p.position.y - 15);
-  });
-}
-
-// Movement handling (field page)
 const keys = {};
-function handleMovementLoop() {
-  if (isField() && myPlayer) {
-    let moved = false;
-    const pos = { ...myPlayer.position };
-    if (keys['ArrowUp']) {
-      pos.y -= 2;
-      moved = true;
-    }
-    if (keys['ArrowDown']) {
-      pos.y += 2;
-      moved = true;
-    }
-    if (keys['ArrowLeft']) {
-      pos.x -= 2;
-      moved = true;
-    }
-    if (keys['ArrowRight']) {
-      pos.x += 2;
-      moved = true;
-    }
-    if (moved) {
-      myPlayer.position = pos;
-      socket.emit('move', pos);
-      drawPlayers();
-    }
-  }
-  requestAnimationFrame(handleMovementLoop);
-}
-requestAnimationFrame(handleMovementLoop);
+let typingTimeout = null;
 
-// Event: socket initialisation
+// DOM Elements
+const playerList = document.getElementById('playerList');
+const playerCount = document.getElementById('playerCount');
+const abilitiesList = document.getElementById('abilitiesList');
+const messages = document.getElementById('messages');
+const typingIndicator = document.getElementById('typingIndicator');
+const changeNameBtn = document.getElementById('changeNameButton');
+const enterDreamBtn = document.getElementById('enterDreamButton');
+const exitDreamBtn = document.getElementById('exitDreamButton');
+const messageInput = document.getElementById('messageInput');
+const dreamView = document.getElementById('dreamFieldView');
+const gameCanvas = document.getElementById('gameCanvas');
+const ctx = gameCanvas ? gameCanvas.getContext('2d') : null;
+
+// Init
 socket.on('init', (data) => {
   myId = data.id;
   myPlayer = data.player;
@@ -147,19 +29,16 @@ socket.on('init', (data) => {
   updatePlayerList();
   updateAbilitiesList();
   addChatMessage(`[SYSTEM] Welcome, ${myPlayer.name}!`);
-  if (isField()) {
-    drawPlayers();
-  }
+  drawPlayers();
 });
 
-// New player joined
+// Player joins/leaves
 socket.on('playerJoined', ({ id, player }) => {
   players[id] = player;
   updatePlayerList();
   addChatMessage(`[SYSTEM] ${player.name} joined the ${player.currentRoom}.`);
 });
 
-// Player left
 socket.on('playerLeft', ({ id }) => {
   if (players[id]) {
     addChatMessage(`[SYSTEM] ${players[id].name} left.`);
@@ -169,49 +48,37 @@ socket.on('playerLeft', ({ id }) => {
   }
 });
 
-// Player moved
-socket.on('playerMoved', ({ id, position, room }) => {
+// Player movement
+socket.on('playerMoved', ({ id, position }) => {
   if (players[id]) {
     players[id].position = position;
     drawPlayers();
   }
 });
 
-// Name update
+// Name and room changes
 socket.on('nameUpdated', ({ id, name }) => {
   if (players[id]) {
     players[id].name = name;
     updatePlayerList();
-    drawPlayers();
   }
 });
 
-// Room change
 socket.on('roomChanged', ({ id, room, player }) => {
-  if (players[id]) {
-    players[id] = player;
-    if (id === myId) {
-      myPlayer = player;
-      if (room === 'OpenField' && !isField()) {
-        window.location.href = 'field.html';
-      } else if (room === 'WaitingRoom' && !isLobby()) {
-        window.location.href = 'index.html';
-      }
+  players[id] = player;
+  if (id === myId) {
+    myPlayer = player;
+    if (room === 'OpenField') {
+      enterDreamView();
     } else {
-      updatePlayerList();
-      drawPlayers();
+      exitDreamView();
     }
   }
+  updatePlayerList();
+  drawPlayers();
 });
 
-// Entered dream (server instructs client to go to dream page)
-socket.on('enteredDream', (playerData) => {
-  myPlayer = playerData;
-  // Immediately redirect to dream level page
-  window.location.href = 'field.html';
-});
-
-// Abilities updated (when unlocking new ability)
+// Abilities
 socket.on('abilitiesUpdated', (abilities) => {
   if (myPlayer) {
     myPlayer.abilities = abilities;
@@ -219,77 +86,139 @@ socket.on('abilitiesUpdated', (abilities) => {
   }
 });
 
-// Chat message
+// Chat
 socket.on('chat message', ({ name, message, room }) => {
-  // Display messages only from players in our room
-  if (room && myPlayer && myPlayer.currentRoom !== room) return;
+  if (!myPlayer || room !== myPlayer.currentRoom) return;
   addChatMessage(`${name}: ${message}`);
 });
 
-// Typing indicator from others
 socket.on('typing', ({ id, isTyping }) => {
-  typingPlayers[id] = isTyping;
-  updateTypingIndicator();
+  if (players[id]) {
+    players[id].typing = isTyping;
+    updateTypingIndicator();
+  }
 });
 
-// Chat input handling
-const messageInput = document.getElementById('messageInput');
+// UI Updates
+function updatePlayerList() {
+  if (!playerList) return;
+  playerList.innerHTML = '';
+  const visible = Object.values(players).filter(p => p.currentRoom === myPlayer.currentRoom);
+  visible.forEach(p => {
+    const li = document.createElement('li');
+    li.style.color = p.color;
+    li.textContent = p.name;
+    playerList.appendChild(li);
+  });
+  if (playerCount) playerCount.textContent = visible.length;
+}
+
+function updateAbilitiesList() {
+  if (!abilitiesList || !myPlayer) return;
+  abilitiesList.innerHTML = '';
+  myPlayer.abilities.forEach(abil => {
+    const li = document.createElement('li');
+    li.textContent = abil;
+    abilitiesList.appendChild(li);
+  });
+}
+
+function addChatMessage(msg) {
+  if (!messages) return;
+  const div = document.createElement('div');
+  div.textContent = msg;
+  messages.appendChild(div);
+  if (messages.childNodes.length > 100) messages.removeChild(messages.firstChild);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function updateTypingIndicator() {
+  if (!typingIndicator) return;
+  const names = Object.values(players)
+    .filter(p => p.typing && p.currentRoom === myPlayer.currentRoom)
+    .map(p => p.name);
+  typingIndicator.textContent = names.length ? `${names.join(', ')} ${names.length > 1 ? 'are' : 'is'} typing...` : '';
+}
+
+// View toggles
+function enterDreamView() {
+  document.getElementById('container').style.display = 'none';
+  dreamView.style.display = 'block';
+}
+
+function exitDreamView() {
+  dreamView.style.display = 'none';
+  document.getElementById('container').style.display = 'flex';
+}
+
+// Events
+if (changeNameBtn) {
+  changeNameBtn.onclick = () => {
+    const newName = prompt('Enter new name:', myPlayer.name);
+    if (newName) socket.emit('setName', newName.trim());
+  };
+}
+
+if (enterDreamBtn) {
+  enterDreamBtn.onclick = () => socket.emit('enterDream');
+}
+
+if (exitDreamBtn) {
+  exitDreamBtn.onclick = () => socket.emit('changeRoom', 'WaitingRoom');
+}
+
 if (messageInput) {
   messageInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       const text = messageInput.value.trim();
-      if (text) {
-        // In the dream field, treat unrecognised words as abilities to unlock
-        if (isField() && !myPlayer.abilities.includes(text)) {
-          socket.emit('abilityUnlocked', text);
-        }
-        socket.emit('chat message', text);
-        messageInput.value = '';
-        socket.emit('typing', false);
+      if (!text) return;
+      if (myPlayer.currentRoom === 'OpenField' && !myPlayer.abilities.includes(text)) {
+        socket.emit('abilityUnlocked', text);
       }
+      socket.emit('chat message', text);
+      messageInput.value = '';
+      socket.emit('typing', false);
     } else {
-      // Start typing indicator
       socket.emit('typing', true);
       clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        socket.emit('typing', false);
-      }, 1000);
+      typingTimeout = setTimeout(() => socket.emit('typing', false), 1000);
     }
   });
 }
 
-// Name change button (only in lobby)
-const changeNameBtn = document.getElementById('changeNameButton');
-if (changeNameBtn) {
-  changeNameBtn.addEventListener('click', () => {
-    const newName = prompt('Enter new name:', myPlayer ? myPlayer.name : '');
-    if (newName && newName.trim()) {
-      socket.emit('setName', newName.trim());
+// Canvas movement
+document.addEventListener('keydown', (e) => keys[e.key] = true);
+document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+function drawPlayers() {
+  if (!ctx || !myPlayer) return;
+  ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+  Object.values(players).forEach(p => {
+    if (p.currentRoom !== myPlayer.currentRoom) return;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.position.x, p.position.y, 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillText(p.name, p.position.x - 20, p.position.y - 15);
+  });
+}
+
+function gameLoop() {
+  if (myPlayer && myPlayer.currentRoom === 'OpenField') {
+    let moved = false;
+    const pos = { ...myPlayer.position };
+    if (keys['ArrowUp']) { pos.y -= 2; moved = true; }
+    if (keys['ArrowDown']) { pos.y += 2; moved = true; }
+    if (keys['ArrowLeft']) { pos.x -= 2; moved = true; }
+    if (keys['ArrowRight']) { pos.x += 2; moved = true; }
+    if (moved) {
+      myPlayer.position = pos;
+      socket.emit('move', pos);
+      drawPlayers();
     }
-  });
+  }
+  requestAnimationFrame(gameLoop);
 }
-
-// Enter Dream button
-const enterDreamBtn = document.getElementById('enterDreamButton');
-if (enterDreamBtn) {
-  enterDreamBtn.addEventListener('click', () => {
-    socket.emit('enterDream');
-  });
-}
-
-// Exit Dream button
-const exitDreamBtn = document.getElementById('exitDreamButton');
-if (exitDreamBtn) {
-  exitDreamBtn.addEventListener('click', () => {
-    socket.emit('changeRoom', 'WaitingRoom');
-  });
-}
-
-// Movement listeners for field
-document.addEventListener('keydown', (e) => {
-  keys[e.key] = true;
-});
-document.addEventListener('keyup', (e) => {
-  keys[e.key] = false;
-});
+gameLoop();

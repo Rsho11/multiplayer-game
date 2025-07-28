@@ -1,25 +1,20 @@
 
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>Knitting in the Dark</title>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="UTF-8">
+    <title>Knitting in the Dark</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main id="waitingRoom">
-    <h1>Knitting in the Dark</h1>
-    <p>The knitting girl hums near the oven...</p>
-    <button id="changeName">Change Name</button>
-    <button id="enterDream">Focus & Descend</button>
-    <ul id="playerList"></ul>
-    <div id="messages"></div>
-    <input type="text" id="chatInput" placeholder="Type a message..." />
-  </main>
+    <div id="room">
+        <h1>🧶 Knitting in the Dark</h1>
+        <div id="npc">The girl sits by the warm oven, knitting quietly...</div>
+        <button id="enterDream">Enter the Dream</button>
+        <div id="status"></div>
+    </div>
 
-  <canvas id="spiralCanvas" width="800" height="600" style="display: none;"></canvas>
-
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="script.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

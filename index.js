@@ -1,45 +1,69 @@
+const socket = io();
+let canvas = document.querySelector("canvas");
+let ctx = canvas.getContext("2d");
 
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const path = require('path');
-const fs = require('fs');
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-
-const SAVE_PATH = path.join(__dirname, 'saves');
-if (!fs.existsSync(SAVE_PATH)) fs.mkdirSync(SAVE_PATH);
-
-app.use(express.static(path.join(__dirname, 'public')));
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
 
 let players = {};
+let me = null;
+let trails = {}; // playerId => array of {x, y}
+let myColor = "#" + Math.floor(Math.random()*16777215).toString(16);
+let team = Math.random() < 0.5 ? 'red' : 'blue';
 
-io.on('connection', (socket) => {
-    const id = socket.id;
-    const saveFile = path.join(SAVE_PATH, `${id}.json`);
-    players[id] = { name: 'Dreamer', abilities: [], visited: [] };
+let keys = {};
+window.addEventListener("keydown", e => keys[e.key] = true);
+window.addEventListener("keyup", e => keys[e.key] = false);
 
-    if (fs.existsSync(saveFile)) {
-        players[id] = JSON.parse(fs.readFileSync(saveFile));
+socket.emit("join", { color: myColor, team });
+
+socket.on("update", serverPlayers => {
+  players = serverPlayers;
+
+  for (let id in players) {
+    if (!trails[id]) trails[id] = [];
+    trails[id].push({ x: players[id].x, y: players[id].y });
+    if (trails[id].length > 50) trails[id].shift();
+  }
+
+  me = players[socket.id];
+});
+
+function sendInput() {
+  let dx = 0, dy = 0;
+  if (keys["w"]) dy = -1;
+  if (keys["s"]) dy = 1;
+  if (keys["a"]) dx = -1;
+  if (keys["d"]) dx = 1;
+  socket.emit("move", { dx, dy });
+}
+setInterval(sendInput, 1000 / 30);
+
+function draw() {
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  for (let id in trails) {
+    const color = players[id]?.color || "#999";
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < trails[id].length; i++) {
+      const p = trails[id][i];
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
     }
+    ctx.stroke();
+  }
 
-    socket.emit('loadPlayer', players[id]);
+  for (let id in players) {
+    const p = players[id];
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-    socket.on('updatePlayer', (data) => {
-        players[id] = data;
-        fs.writeFileSync(saveFile, JSON.stringify(data));
-    });
-
-    socket.on('disconnect', () => {
-        delete players[id];
-    });
-});
-
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public/index.html'));
-});
-
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Knitting in the Dark running on port ${PORT}`));
+  requestAnimationFrame(draw);
+}
+draw();

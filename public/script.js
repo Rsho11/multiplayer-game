@@ -103,3 +103,15 @@ function draw() {
   requestAnimationFrame(draw);
 }
 draw();
+
+
+const leaderboardList = document.getElementById("leaderboardList");
+
+socket.on("leaderboard", (topPlayers) => {
+  leaderboardList.innerHTML = "";
+  topPlayers.forEach((p, i) => {
+    const li = document.createElement("li");
+    li.textContent = `#${i + 1} ${p.name}: ${p.score}`;
+    leaderboardList.appendChild(li);
+  });
+});

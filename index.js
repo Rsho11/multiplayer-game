@@ -38,4 +38,10 @@ io.on("connection", socket => {
 
 setInterval(() => {
   io.emit("update", players);
-}, 1000 / 30);  // ✅ properly closed
+}, 1000 / 30);
+
+// ✅ Start the server — THIS WAS MISSING
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});

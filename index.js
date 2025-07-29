@@ -38,4 +38,4 @@ io.on("connection", socket => {
 
 setInterval(() => {
   io.emit("update", players);
-}, 10
+}, 1000 / 30);  // ✅ properly closed

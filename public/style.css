@@ -54,3 +54,34 @@ button {
   border: none;
   margin-left: 6px;
 }
+#nameModal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+#modalBox {
+  background: #222;
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+#modalBox input {
+  padding: 8px;
+  margin-top: 8px;
+  width: 200px;
+  font-size: 16px;
+}
+#modalBox button {
+  margin-top: 12px;
+  padding: 8px 16px;
+  background: #444;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+

@@ -27,6 +27,10 @@ io.on("connection", socket => {
     p.y += dy * speed;
   });
 
+  socket.on("chat", (msg) => {
+    io.emit("chat", { id: socket.id, text: msg });
+  });
+
   socket.on("disconnect", () => {
     delete players[socket.id];
   });
@@ -34,9 +38,4 @@ io.on("connection", socket => {
 
 setInterval(() => {
   io.emit("update", players);
-}, 1000 / 30);
-
-const PORT = process.env.PORT || 3000;
-http.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+}, 10

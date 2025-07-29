@@ -56,6 +56,11 @@ socket.on("chat", ({ id, text }) => {
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
 });
+function drawBorders() {
+  ctx.strokeStyle = "#444";
+  ctx.lineWidth = 4;
+  ctx.strokeRect(0, 0, canvas.width, canvas.height);
+}
 
 // 🚶 Movement
 function sendInput() {
@@ -72,7 +77,7 @@ setInterval(sendInput, 1000 / 30);
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+  drawBorders();
   for (let id in trails) {
     const color = players[id]?.color || "#999";
     ctx.strokeStyle = color;

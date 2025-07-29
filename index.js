@@ -33,16 +33,12 @@ io.on("connection", socket => {
     const p = players[socket.id];
     if (!p) return;
 
-    // Update direction only
-if (p.dx !== 0 || p.dy !== 0) {
-  const head = p.trail[p.trail.length - 1];
-  for (let i = 0; i < p.trail.length - 10; i++) {
-    const point = p.trail[i];
-    const d = Math.hypot(point.x - head.x, point.y - head.y);
-    if (d < 10) {
-      p.score += 1;
-      p.trail = [];
-      break;
+    // Only update direction — position is handled in the main loop
+    if (dx !== 0 || dy !== 0) {
+      p.dx = dx;
+      p.dy = dy;
+    }
+  });
 
   socket.on("chat", (msg) => {
     io.emit("chat", { id: socket.id, text: msg });
@@ -58,11 +54,11 @@ setInterval(() => {
     const p = players[id];
     if (!p) continue;
 
-    // Apply movement
+    // Move player
     p.x += p.dx * speed;
     p.y += p.dy * speed;
 
-    // Clamp to canvas bounds
+    // Clamp to game area
     p.x = Math.max(0, Math.min(p.x, 1920));
     p.y = Math.max(0, Math.min(p.y, 1080));
 
@@ -70,8 +66,8 @@ setInterval(() => {
     p.trail.push({ x: p.x, y: p.y });
     if (p.trail.length > 60) p.trail.shift();
 
-    // Check for simple loop (score)
-    if (p.trail.length > 20) {
+    // Check for loop (only when moving)
+    if ((p.dx !== 0 || p.dy !== 0) && p.trail.length > 20) {
       const head = p.trail[p.trail.length - 1];
       for (let i = 0; i < p.trail.length - 10; i++) {
         const point = p.trail[i];

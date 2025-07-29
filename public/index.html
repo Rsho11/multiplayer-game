@@ -1,20 +1,15 @@
-
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Knitting in the Dark</title>
-    <link rel="stylesheet" href="style.css">
+  <title>Net-Knit Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #111; }
+    canvas { display: block; }
+  </style>
 </head>
 <body>
-    <div id="room">
-        <h1>🧶 Knitting in the Dark</h1>
-        <div id="npc">The girl sits by the warm oven, knitting quietly...</div>
-        <button id="enterDream">Enter the Dream</button>
-        <div id="status"></div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+  <canvas></canvas>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>

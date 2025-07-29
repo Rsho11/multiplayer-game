@@ -2,20 +2,29 @@
 <html>
 <head>
   <title>Knitting in the Dark</title>
-  <style>
-    body { margin: 0; overflow: hidden; background: #111; }
-    canvas { display: block; }
-  </style>
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <canvas></canvas>
+
+  <!-- Name Entry Modal -->
+  <div id="nameModal">
+    <div id="modalBox">
+      <h2>Enter your name</h2>
+      <input id="nameInput" placeholder="Your name" maxlength="16" />
+      <button id="startGame">Start</button>
+    </div>
+  </div>
+
+  <!-- Chat UI -->
   <div id="chat">
-  <div id="messages"></div>
-  <form id="chatForm">
-    <input id="chatInput" autocomplete="off" placeholder="Type a message..." />
-    <button>Send</button>
-  </form>
-</div>
+    <div id="messages"></div>
+    <form id="chatForm">
+      <input id="chatInput" autocomplete="off" placeholder="Type a message..." />
+      <button>Send</button>
+    </form>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>

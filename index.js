@@ -34,11 +34,15 @@ io.on("connection", socket => {
     if (!p) return;
 
     // Update direction only
-    if (dx !== 0 || dy !== 0) {
-      p.dx = dx;
-      p.dy = dy;
-    }
-  });
+if (p.dx !== 0 || p.dy !== 0) {
+  const head = p.trail[p.trail.length - 1];
+  for (let i = 0; i < p.trail.length - 10; i++) {
+    const point = p.trail[i];
+    const d = Math.hypot(point.x - head.x, point.y - head.y);
+    if (d < 10) {
+      p.score += 1;
+      p.trail = [];
+      break;
 
   socket.on("chat", (msg) => {
     io.emit("chat", { id: socket.id, text: msg });

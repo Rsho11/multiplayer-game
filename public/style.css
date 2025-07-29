@@ -84,4 +84,25 @@ button {
   border: none;
   cursor: pointer;
 }
+#leaderboard {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  background: rgba(0,0,0,0.7);
+  padding: 10px;
+  color: white;
+  font-family: sans-serif;
+  width: 180px;
+  max-height: 300px;
+  overflow-y: auto;
+  border-radius: 8px;
+}
+#leaderboard h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+}
+#leaderboardList {
+  padding-left: 16px;
+  margin: 0;
+}
 

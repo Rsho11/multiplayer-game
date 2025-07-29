@@ -12,9 +12,15 @@ io.on("connection", socket => {
   console.log("Player connected:", socket.id);
 
 socket.on("join", ({ name, color, team }) => {
+  // Pick a random starting direction
+  const angles = [ [1, 0], [-1, 0], [0, 1], [0, -1] ];
+  const [dx, dy] = angles[Math.floor(Math.random() * angles.length)];
+
   players[socket.id] = {
     x: Math.random() * 800 + 100,
     y: Math.random() * 600 + 100,
+    dx,
+    dy,
     color,
     team,
     name,

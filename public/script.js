@@ -7,29 +7,35 @@ canvas.height = window.innerHeight;
 
 let players = {};
 let me = null;
-let trails = {}; // playerId => array of {x, y}
-let myColor = "#" + Math.floor(Math.random()*16777215).toString(16);
+let trails = {};
+let myName = "";
+let myColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
 let team = Math.random() < 0.5 ? 'red' : 'blue';
-
 let keys = {};
+
+// 🚪 Start game after name input
+document.getElementById("startGame").onclick = () => {
+  myName = document.getElementById("nameInput").value.trim();
+  if (myName.length < 1) return alert("Please enter your name!");
+  document.getElementById("nameModal").style.display = "none";
+  socket.emit("join", { name: myName, color: myColor, team });
+};
+
 window.addEventListener("keydown", e => keys[e.key] = true);
 window.addEventListener("keyup", e => keys[e.key] = false);
 
-socket.emit("join", { color: myColor, team });
-
 socket.on("update", serverPlayers => {
   players = serverPlayers;
+  me = players[socket.id];
 
   for (let id in players) {
     if (!trails[id]) trails[id] = [];
     trails[id].push({ x: players[id].x, y: players[id].y });
     if (trails[id].length > 50) trails[id].shift();
   }
-
-  me = players[socket.id];
 });
 
-// Chat system
+// 🧵 Chat
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const messages = document.getElementById("messages");
@@ -45,13 +51,13 @@ chatForm.addEventListener("submit", (e) => {
 
 socket.on("chat", ({ id, text }) => {
   const div = document.createElement("div");
-  const sender = players[id]?.team === 'red' ? '🧶 Red' : '🔵 Blue';
-  div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  const name = players[id]?.name || "Unknown";
+  div.innerHTML = `<strong>${name}:</strong> ${text}`;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
 });
 
-
+// 🚶 Movement
 function sendInput() {
   let dx = 0, dy = 0;
   if (keys["w"]) dy = -1;
@@ -62,6 +68,7 @@ function sendInput() {
 }
 setInterval(sendInput, 1000 / 30);
 
+// 🎨 Draw players + trails + names
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -85,6 +92,12 @@ function draw() {
     ctx.beginPath();
     ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
     ctx.fill();
+
+    // name tag
+    ctx.fillStyle = "#ccc";
+    ctx.font = "12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(p.name || "?", p.x, p.y - 12);
   }
 
   requestAnimationFrame(draw);

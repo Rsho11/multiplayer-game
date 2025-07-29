@@ -11,14 +11,16 @@ const speed = 3;
 io.on("connection", socket => {
   console.log("Player connected:", socket.id);
 
-  socket.on("join", ({ color, team }) => {
-    players[socket.id] = {
-      x: Math.random() * 800 + 100,
-      y: Math.random() * 600 + 100,
-      color: color,
-      team: team,
-    };
-  });
+socket.on("join", ({ name, color, team }) => {
+  players[socket.id] = {
+    x: Math.random() * 800 + 100,
+    y: Math.random() * 600 + 100,
+    color,
+    team,
+    name,
+  };
+});
+
 
   socket.on("move", ({ dx, dy }) => {
     const p = players[socket.id];

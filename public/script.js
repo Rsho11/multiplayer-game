@@ -29,6 +29,29 @@ socket.on("update", serverPlayers => {
   me = players[socket.id];
 });
 
+// Chat system
+const chatForm = document.getElementById("chatForm");
+const chatInput = document.getElementById("chatInput");
+const messages = document.getElementById("messages");
+
+chatForm.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const msg = chatInput.value.trim();
+  if (msg) {
+    socket.emit("chat", msg);
+    chatInput.value = "";
+  }
+});
+
+socket.on("chat", ({ id, text }) => {
+  const div = document.createElement("div");
+  const sender = players[id]?.team === 'red' ? '🧶 Red' : '🔵 Blue';
+  div.innerHTML = `<strong>${sender}:</strong> ${text}`;
+  messages.appendChild(div);
+  messages.scrollTop = messages.scrollHeight;
+});
+
+
 function sendInput() {
   let dx = 0, dy = 0;
   if (keys["w"]) dy = -1;

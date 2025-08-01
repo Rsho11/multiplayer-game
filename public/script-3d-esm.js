@@ -94,7 +94,7 @@ controls.maxPolarAngle = 0.49 * Math.PI;
 }
 
 // arena floor + borders
-const ARENA_W = 1200, ARENA_H = 800;
+const ARENA_W = 4048, ARENA_H = 4048;
 {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ARENA_W, ARENA_H),
@@ -114,18 +114,91 @@ const ARENA_W = 1200, ARENA_H = 800;
   const wallEast  = wallWest.clone(); wallEast.position.x = ARENA_W/2;
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
 
-  const grid = new THREE.GridHelper(ARENA_W, 40, 0x444444, 0x2a2a2a);
   grid.position.y = 0.05;
-  scene.add(grid);
 }
 
 // fallback origin marker
-scene.add(new THREE.AxesHelper(20));
 
 const meGroup = new THREE.Group();
 scene.add(meGroup);
 let meSphere = null;
 const otherMeshes = new Map(); // id -> {group, mesh, label}
+
+
+// --- Fabric "yarn" décor on the floor (fast instancing) ---
+(function addYarnDecor() {
+  // Palette of soft yarn tones
+  const palette = [0xD9747A, 0x6AA9FF, 0x9EE09E, 0xE7C77A, 0xCE98F7, 0xF2A65A, 0x84DCC6];
+
+  // Helper to pick a palette color
+  const pickColor = () => palette[(Math.random() * palette.length) | 0];
+
+  // 1) Loops of thread (thin torus lying on the floor)
+  const loopCount = 300;                         // adjust density here
+  const loopGeom  = new THREE.TorusGeometry(6, 0.35, 8, 24); // radius, tube, radial/tubular segments
+  const loopMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0 });
+  const loopMesh  = new THREE.InstancedMesh(loopGeom, loopMat, loopCount);
+  loopMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(loopMesh);
+
+  // 2) Short strands (thin cylinders laid sideways)
+  const strandCount = 300;
+  const strandGeom = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
+  const strandMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.0 });
+  const strandMesh = new THREE.InstancedMesh(strandGeom, strandMat, strandCount);
+  strandMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(strandMesh);
+
+  const pos = new THREE.Vector3();
+  const quat = new THREE.Quaternion();
+  const scale = new THREE.Vector3();
+  const m4 = new THREE.Matrix4();
+
+  // scatter helper
+  const halfW = ARENA_W / 2 - 30;   // keep a little margin from walls
+  const halfH = ARENA_H / 2 - 30;
+
+  // place loops
+  for (let i = 0; i < loopCount; i++) {
+    pos.set(
+      (Math.random() * 2 - 1) * halfW,
+      0.2,
+      (Math.random() * 2 - 1) * halfH
+    );
+    // random yaw
+    const yaw = Math.random() * Math.PI * 2;
+    quat.setFromEuler(new THREE.Euler(-Math.PI/2, yaw, 0)); // lay flat on floor then rotate around Y
+    // slight size variance
+    const s = 0.7 + Math.random() * 0.8;
+    scale.set(s, s, s);
+    m4.compose(pos, quat, scale);
+    loopMesh.setMatrixAt(i, m4);
+    loopMesh.setColorAt(i, new THREE.Color(pickColor()));
+  }
+  loopMesh.instanceColor.needsUpdate = true;
+  loopMesh.instanceMatrix.needsUpdate = true;
+
+  // place strands
+  for (let i = 0; i < strandCount; i++) {
+    pos.set(
+      (Math.random() * 2 - 1) * halfW,
+      0.25,
+      (Math.random() * 2 - 1) * halfH
+    );
+    // lay on floor, random yaw
+    const yaw = Math.random() * Math.PI * 2;
+    quat.setFromEuler(new THREE.Euler(0, yaw, Math.PI/2)); // rotate cylinder sideways
+    // random length scaling
+    const len = 0.7 + Math.random() * 1.6;
+    scale.set(1, len, 1);
+    m4.compose(pos, quat, scale);
+    strandMesh.setMatrixAt(i, m4);
+    strandMesh.setColorAt(i, new THREE.Color(pickColor()));
+  }
+  strandMesh.instanceColor.needsUpdate = true;
+  strandMesh.instanceMatrix.needsUpdate = true;
+})();
+
 
 function makeLabelCanvas(text) {
   const cnv = document.createElement("canvas");

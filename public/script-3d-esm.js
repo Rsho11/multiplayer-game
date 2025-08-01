@@ -114,7 +114,6 @@ const ARENA_W = 4048, ARENA_H = 4048;
   const wallEast  = wallWest.clone(); wallEast.position.x = ARENA_W/2;
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
 
-  grid.position.y = 0.05;
 }
 
 // fallback origin marker

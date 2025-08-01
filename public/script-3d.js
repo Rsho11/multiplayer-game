@@ -1,5 +1,6 @@
 // public/script-3d.js
 const socket = io();
+console.log("[client] script-3d.js loaded");
 
 // ====== UI (name + chat) ======
 let myName = "";
@@ -9,6 +10,7 @@ startBtn.onclick = () => {
   if (!myName) return alert("Please enter your name!");
   document.getElementById("nameModal").style.display = "none";
   const myColor = "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
+  console.log("[client] join ->", myName, myColor);
   socket.emit("join", { name: myName, color: myColor });
 };
 
@@ -43,47 +45,63 @@ function updateLeaderboard(snapshot) {
 
 // ====== Three.js scene ======
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111111);
+scene.background = new THREE.Color(0x131313);
+console.log("[client] three.js scene created");
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// camera + orbit controls (3rd person)
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 2000);
-camera.position.set(0, 80, 160);
+// waiting overlay
+const waitDiv = document.createElement("div");
+waitDiv.style.position = "fixed";
+waitDiv.style.top = "50%";
+waitDiv.style.left = "50%";
+waitDiv.style.transform = "translate(-50%, -50%)";
+waitDiv.style.color = "#ddd";
+waitDiv.style.font = "16px Segoe UI, sans-serif";
+waitDiv.style.padding = "8px 12px";
+waitDiv.style.background = "rgba(0,0,0,0.5)";
+waitDiv.style.border = "1px solid #444";
+waitDiv.style.borderRadius = "8px";
+waitDiv.style.zIndex = "4";
+waitDiv.textContent = "Waiting for server state…";
+document.body.appendChild(waitDiv);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
+camera.position.set(0, 140, 260);
 
 const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
-controls.target.set(0, 2, 0);         // look at player height
-controls.minDistance = 60;
-controls.maxDistance = 220;
-controls.minPolarAngle = 0.25 * Math.PI;
+controls.target.set(0, 6, 0);
+controls.minDistance = 90;
+controls.maxDistance = 360;
+controls.minPolarAngle = 0.2 * Math.PI;
 controls.maxPolarAngle = 0.49 * Math.PI;
 
-// lights
+// brighter lights so floor is clearly visible
 {
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x222233, 0.8);
+  const amb = new THREE.AmbientLight(0xffffff, 0.45);
+  scene.add(amb);
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x333344, 0.6);
   scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-  dir.position.set(100, 200, 100);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(200, 400, 200);
   scene.add(dir);
 }
 
-// arena floor + border walls
+// arena floor + border walls (high-contrast)
 const ARENA_W = 1200, ARENA_H = 800;
 {
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(ARENA_W, ARENA_H, 1, 1),
-    new THREE.MeshPhongMaterial({ color: 0x151515 })
-  );
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.9, metalness: 0.0 });
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_W, ARENA_H), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = 0;
   scene.add(floor);
 
-  const borderMat = new THREE.MeshPhongMaterial({ color: 0x404040 });
-  const wallH = 12, wallT = 2;
+  const borderMat = new THREE.MeshStandardMaterial({ color: 0x6a6a6a, metalness: 0.2, roughness: 0.7 });
+  const wallH = 16, wallT = 3;
 
   const wallNorth = new THREE.Mesh(new THREE.BoxGeometry(ARENA_W, wallH, wallT), borderMat);
   wallNorth.position.set(0, wallH/2, -ARENA_H/2);
@@ -95,25 +113,29 @@ const ARENA_W = 1200, ARENA_H = 800;
 
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
 
-  // subtle grid lines
-  const grid = new THREE.GridHelper(ARENA_W, 60, 0x2b2b2b, 0x2b2b2b);
+  const grid = new THREE.GridHelper(ARENA_W, 40, 0x444444, 0x2a2a2a);
+  grid.position.y = 0.05;
   scene.add(grid);
 }
 
-// helpers for player meshes
-const meGroup = new THREE.Group(); // local player (camera targets this)
+// fallback origin marker (so you see *something* even before snapshots)
+{
+  const cross = new THREE.AxesHelper(20);
+  cross.position.set(0, 1, 0);
+  scene.add(cross);
+}
+
+const meGroup = new THREE.Group();
 scene.add(meGroup);
 let meSphere = null;
-
 const otherMeshes = new Map(); // id -> {group, mesh, label}
 
-// make a text sprite for names
 function makeLabelCanvas(text) {
   const cnv = document.createElement("canvas");
   const ctx = cnv.getContext("2d");
   const font = 28;
   ctx.font = `${font}px "Segoe UI", Arial`;
-  const w = ctx.measureText(text).width + 20;
+  const w = Math.ceil(ctx.measureText(text).width + 20);
   const h = font + 12;
   cnv.width = w; cnv.height = h;
   ctx.font = `${font}px "Segoe UI", Arial`;
@@ -124,15 +146,17 @@ function makeLabelCanvas(text) {
   ctx.fillText(text, 10, h / 2);
   const tex = new THREE.CanvasTexture(cnv);
   tex.minFilter = THREE.LinearFilter;
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true });
-  const sprite = new THREE.Sprite(mat);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
   sprite.scale.set(w * 0.2, h * 0.2, 1);
   return sprite;
 }
 
 // ====== Input: WASD relative to camera ======
 const keys = {};
-window.addEventListener("keydown", (e) => { if (!/input|textarea/i.test(e.target.tagName)) keys[e.key.toLowerCase()] = true; });
+window.addEventListener("keydown", (e) => {
+  if (/input|textarea/i.test(e.target.tagName)) return;
+  keys[e.key.toLowerCase()] = true;
+});
 window.addEventListener("keyup",   (e) => { keys[e.key.toLowerCase()] = false; });
 
 function sendInput() {
@@ -148,7 +172,6 @@ function sendInput() {
   if (keys["d"] || keys["arrowright"]) { x += right.x;   z += right.z;   }
   if (keys["a"] || keys["arrowleft"])  { x -= right.x;   z -= right.z;   }
 
-  // normalize
   const mag = Math.hypot(x, z);
   if (mag > 0) { x /= mag; z /= mag; }
 
@@ -157,30 +180,29 @@ function sendInput() {
 setInterval(sendInput, 1000 / 30);
 
 // ====== Networking: apply server snapshot ======
-let lastSnapshot = [];
+let lastCount = 0;
 socket.on("state3d", (snapshot) => {
-  lastSnapshot = snapshot;
+  waitDiv.style.display = "none";
+  lastCount = snapshot.length;
+  // console.log("[client] state3d players:", snapshot.length);
   updateLeaderboard(snapshot);
 
-  // ensure my mesh exists
   const mine = snapshot.find(p => p.id === socket.id);
   if (mine && !meSphere) {
     const geom = new THREE.SphereGeometry(6, 24, 18);
     const mat = new THREE.MeshStandardMaterial({ color: mine.color || 0x66ccff, metalness: 0.1, roughness: 0.6 });
     meSphere = new THREE.Mesh(geom, mat);
     meGroup.add(meSphere);
-
-    // camera target follows me
-    controls.target.set(mine.x, 2, mine.z);
+    controls.target.set(mine.x, 6, mine.z);
+    console.log("[client] created local sphere");
   }
 
-  // create/update others
   const seen = new Set();
   for (const p of snapshot) {
     if (p.id === socket.id) {
       if (meSphere) {
         meGroup.position.set(p.x, p.y, p.z);
-        controls.target.lerp(new THREE.Vector3(p.x, p.y, p.z), 0.25);
+        controls.target.lerp(new THREE.Vector3(p.x, p.y, p.z), 0.2);
       }
       continue;
     }
@@ -191,10 +213,8 @@ socket.on("state3d", (snapshot) => {
       const geom = new THREE.SphereGeometry(6, 24, 18);
       const mat = new THREE.MeshStandardMaterial({ color: p.color || 0xffaa00, metalness: 0.1, roughness: 0.6 });
       const mesh = new THREE.Mesh(geom, mat);
-
       const label = makeLabelCanvas(p.name || "?");
       label.position.set(0, 12, 0);
-
       group.add(mesh, label);
       scene.add(group);
       otherMeshes.set(p.id, { group, mesh, label });
@@ -203,11 +223,10 @@ socket.on("state3d", (snapshot) => {
     entry.group.position.set(p.x, p.y, p.z);
   }
 
-  // remove stale
+  // remove missing players
   for (const [id, obj] of otherMeshes) {
     if (!seen.has(id)) {
       scene.remove(obj.group);
-      obj.group.traverse((o)=>{ if (o.material?.map) o.material.map.dispose(); o.material?.dispose?.(); o.geometry?.dispose?.(); });
       otherMeshes.delete(id);
     }
   }
@@ -220,6 +239,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 animate();
+console.log("[client] render loop started");
 
 // handle resize
 window.addEventListener("resize", () => {

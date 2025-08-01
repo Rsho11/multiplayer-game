@@ -30,9 +30,20 @@
     <ol id="leaderboardList"></ol>
   </div>
 
-  <!-- Scripts -->
-  <script src="/socket.io/socket.io.js"></script>
-  <!-- Use the ES module client only -->
-  <script type="module" src="script-3d-esm.js"></script>
+<!-- Socket.IO -->
+<script src="/socket.io/socket.io.js"></script>
+
+<!-- Import map must come BEFORE the module that uses it -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js",
+    "three/examples/jsm/controls/OrbitControls.js": "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/controls/OrbitControls.js"
+  }
+}
+</script>
+
+<!-- Your module -->
+<script type="module" src="script-3d-esm.js"></script>
 </body>
 </html>

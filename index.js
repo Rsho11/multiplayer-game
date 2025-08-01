@@ -1,3 +1,4 @@
+// index.js
 const express = require("express");
 const app = express();
 const http = require("http").createServer(app);
@@ -5,93 +6,111 @@ const io = require("socket.io")(http);
 
 app.use(express.static("public"));
 
-const players = {};
-const speed = 3;
+const players = new Map(); // id -> player
+const ARENA = { w: 1200, h: 800 };      // X [-w/2,+w/2], Z [-h/2,+h/2]
+const TICK_HZ = 60;
+const DT = 1 / TICK_HZ;
+const ACCEL = 90 * DT;      // acceleration per tick toward input dir
+const FRICTION = 0.90;      // velocity decay per tick (sliding)
+const MAX_SPEED = 300 * DT; // clamp speed per tick
 
-io.on("connection", socket => {
+io.on("connection", (socket) => {
   console.log("Player connected:", socket.id);
 
-  socket.on("join", ({ name, color, team }) => {
-    // Pick a random starting direction
-    const angles = [ [1, 0], [-1, 0], [0, 1], [0, -1] ];
-    const [dx, dy] = angles[Math.floor(Math.random() * angles.length)];
+  socket.on("join", ({ name, color }) => {
+    // random spawn inside arena
+    const x = (Math.random() - 0.5) * (ARENA.w - 100);
+    const z = (Math.random() - 0.5) * (ARENA.h - 100);
 
-    players[socket.id] = {
-      x: Math.random() * 800 + 100,
-      y: Math.random() * 600 + 100,
-      dx,
-      dy,
-      color,
-      team,
-      name,
+    // random initial direction so they move right away
+    const dirs = [
+      [1, 0], [-1, 0], [0, 1], [0, -1]
+    ];
+    const [dx, dz] = dirs[Math.floor(Math.random() * dirs.length)];
+
+    players.set(socket.id, {
+      id: socket.id,
+      name: String(name || "Player").slice(0, 16),
+      color: color || "#66ccff",
+      x, y: 2, z,
+      vx: dx * (MAX_SPEED * 0.75),
+      vz: dz * (MAX_SPEED * 0.75),
+      inDx: dx, inDz: dz,        // last input direction
+      inputActive: true,         // whether to accelerate this tick
       score: 0,
-      trail: []
-    };
+    });
   });
 
-  socket.on("move", ({ dx, dy }) => {
-    const p = players[socket.id];
+  // client sends input direction in world space (XZ), normalized or 0
+  socket.on("move3d", ({ dx, dz }) => {
+    const p = players.get(socket.id);
     if (!p) return;
 
-    // Only update direction — position is handled in the main loop
-    if (dx !== 0 || dy !== 0) {
-      p.dx = dx;
-      p.dy = dy;
+    // if there is input, update the desired dir; otherwise keep last dir (slide)
+    if (typeof dx === "number" && typeof dz === "number") {
+      const mag = Math.hypot(dx, dz);
+      if (mag > 0.0001) {
+        p.inDx = dx / mag;
+        p.inDz = dz / mag;
+        p.inputActive = true;
+      } else {
+        p.inputActive = false; // no new acceleration; friction will apply
+      }
     }
   });
 
   socket.on("chat", (msg) => {
-    io.emit("chat", { id: socket.id, text: msg });
+    const p = players.get(socket.id);
+    io.emit("chat", { id: socket.id, name: p?.name || "?", text: String(msg).slice(0, 200) });
   });
 
   socket.on("disconnect", () => {
-    delete players[socket.id];
+    players.delete(socket.id);
   });
 });
 
+// physics + broadcast
 setInterval(() => {
-  for (let id in players) {
-    const p = players[id];
-    if (!p) continue;
-
-    // Move player
-    p.x += p.dx * speed;
-    p.y += p.dy * speed;
-
-    // Clamp to game area
-    p.x = Math.max(0, Math.min(p.x, 1920));
-    p.y = Math.max(0, Math.min(p.y, 1080));
-
-    // Save trail
-    p.trail.push({ x: p.x, y: p.y });
-    if (p.trail.length > 60) p.trail.shift();
-
-    // Check for loop (only when moving)
-    if ((p.dx !== 0 || p.dy !== 0) && p.trail.length > 20) {
-      const head = p.trail[p.trail.length - 1];
-      for (let i = 0; i < p.trail.length - 10; i++) {
-        const point = p.trail[i];
-        const d = Math.hypot(point.x - head.x, point.y - head.y);
-        if (d < 10) {
-          p.score += 1;
-          p.trail = [];
-          break;
-        }
-      }
+  for (const p of players.values()) {
+    // accelerate toward input dir only if active
+    if (p.inputActive) {
+      p.vx += p.inDx * ACCEL;
+      p.vz += p.inDz * ACCEL;
     }
+
+    // clamp speed
+    const speed = Math.hypot(p.vx, p.vz);
+    if (speed > MAX_SPEED) {
+      const s = MAX_SPEED / speed;
+      p.vx *= s; p.vz *= s;
+    }
+
+    // integrate
+    p.x += p.vx;
+    p.z += p.vz;
+
+    // friction for sliding feel
+    p.vx *= FRICTION;
+    p.vz *= FRICTION;
+
+    // collide with arena bounds (simple bounce & slide)
+    const halfW = ARENA.w / 2, halfH = ARENA.h / 2;
+
+    if (p.x < -halfW) { p.x = -halfW; p.vx = Math.abs(p.vx) * 0.4; }
+    if (p.x >  halfW) { p.x =  halfW; p.vx = -Math.abs(p.vx) * 0.4; }
+    if (p.z < -halfH) { p.z = -halfH; p.vz = Math.abs(p.vz) * 0.4; }
+    if (p.z >  halfH) { p.z =  halfH; p.vz = -Math.abs(p.vz) * 0.4; }
   }
 
-  io.emit("update", players);
-
-  const topPlayers = Object.values(players)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10)
-    .map(p => ({ name: p.name, score: p.score }));
-
-  io.emit("leaderboard", topPlayers);
-}, 1000 / 30);
+  // broadcast a compact snapshot
+  const snapshot = [];
+  for (const p of players.values()) {
+    snapshot.push({ id: p.id, name: p.name, color: p.color, x: p.x, y: p.y, z: p.z, score: p.score });
+  }
+  io.emit("state3d", snapshot);
+}, 1000 / TICK_HZ);
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+  console.log(`✅ 3D server running on port ${PORT}`);
 });

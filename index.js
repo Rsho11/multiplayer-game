@@ -7,7 +7,7 @@ const io = require("socket.io")(http);
 app.use(express.static("public"));
 
 const players = new Map(); // id -> player
-const ARENA = { w: 1200, h: 800 };      // X [-w/2,+w/2], Z [-h/2,+h/2]
+const ARENA = { w: 4048, h: 4048 };      // X [-w/2,+w/2], Z [-h/2,+h/2]
 const TICK_HZ = 60;
 const DT = 1 / TICK_HZ;
 const ACCEL = 90 * DT;      // acceleration per tick toward input dir

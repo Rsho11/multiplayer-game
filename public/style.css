@@ -1,152 +1,201 @@
-
-body {
-    font-family: monospace;
-    background-color: #1a1a1a;
-    color: #f0e6d2;
-    margin: 0;
-    padding: 20px;
-}
-#room {
-    max-width: 600px;
-    margin: auto;
-    padding: 20px;
-    background-color: #2e2e2e;
-    border-radius: 10px;
-}
-button {
-    padding: 10px 20px;
-    background-color: #444;
-    color: white;
-    border: none;
-    cursor: pointer;
-    margin-top: 10px;
-}
-#chat {
-  position: fixed;
-  bottom: 0;
-  width: 100%;
-  background: rgba(20, 20, 20, 0.8);
-  padding: 10px;
-  display: flex;
-  flex-direction: column;
-}
-#messages {
-  height: 100px;
-  overflow-y: auto;
-  font-size: 14px;
-  color: #ccc;
-  margin-bottom: 5px;
-}
-#chatForm {
-  display: flex;
-}
-#chatInput {
-  flex: 1;
-  padding: 6px;
-  background: #222;
-  color: white;
-  border: none;
-}
-#chatForm button {
-  padding: 6px 12px;
-  background: #444;
-  color: white;
-  border: none;
-  margin-left: 6px;
-}
-#nameModal {
-  position: fixed;
-  top: 0; left: 0;
-  width: 100vw; height: 100vh;
-  background: rgba(0,0,0,0.85);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-}
-#modalBox {
-  background: #222;
-  padding: 20px;
-  border-radius: 8px;
-  text-align: center;
-}
-#modalBox input {
-  padding: 8px;
-  margin-top: 8px;
-  width: 200px;
-  font-size: 16px;
-}
-#modalBox button {
-  margin-top: 12px;
-  padding: 8px 16px;
-  background: #444;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-#leaderboard {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  background: rgba(0,0,0,0.7);
-  padding: 10px;
-  color: white;
-  font-family: sans-serif;
-  width: 180px;
-  max-height: 300px;
-  overflow-y: auto;
-  border-radius: 8px;
-}
-#leaderboard h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-#leaderboardList {
-  padding-left: 16px;
-  margin: 0;
+/* =========================================================
+   Global / Reset
+   ========================================================= */
+:root{
+  --bg: #111;
+  --panel: #222;
+  --panel-2: rgba(200,200,200,.12);
+  --text: #eee;
+  --muted: #ccc;
+  --border: #888;
+  --accent: #444;
 }
 
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden; /* ✅ disables scrollbar */
-  width: 100%;
   height: 100%;
-  background: #111;
+  overflow: hidden;             /* No page scrollbars */
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* If you’re using a <canvas> (2D) or Three.js renderer canvas, this keeps it full-screen */
 canvas {
   display: block;
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0;                     /* top:0; right:0; bottom:0; left:0; */
 }
+
+/* Buttons (shared) */
+button {
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+button:hover { filter: brightness(1.1); }
+
+/* Optional centered “room” panel (if you ever show it) */
+#room {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 20px;
+  background: #1a1a1a;
+  border-radius: 10px;
+}
+
+/* =========================================================
+   Name Modal
+   ========================================================= */
+#nameModal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+#modalBox {
+  background: var(--panel);
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  min-width: 260px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.45);
+}
+#modalBox h2 { margin: 0 0 10px; font-weight: 600; }
+#modalBox input {
+  display: block;
+  width: 220px;
+  margin: 8px auto 0;
+  padding: 10px 12px;
+  color: var(--text);
+  background: #1c1c1c;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+/* =========================================================
+   Chat Bar (fixed at bottom)
+   ========================================================= */
+#chat {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.60);
+  padding: 8px;
+  z-index: 5;
+  box-shadow: 0 -6px 16px rgba(0,0,0,.25);
+  backdrop-filter: blur(3px);
+}
+
+#messages {
+  height: 110px;
+  overflow-y: auto;
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0 0 6px;
+  padding-right: 4px; /* room for scrollbar */
+}
+
+#chatForm {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+#chatInput {
+  flex: 1;
+  padding: 10px 12px;
+  background: #1f1f1f;
+  color: #fff;
+  border: 1px solid #333;
+  border-radius: 8px;
+}
+
+#chatForm button {
+  padding: 10px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+}
+
+/* Scrollbar styling (nice but subtle) */
+#messages::-webkit-scrollbar { width: 10px; height: 10px; }
+#messages::-webkit-scrollbar-thumb { background: #2d2d2d; border-radius: 8px; }
+#messages::-webkit-scrollbar-track { background: #141414; }
+
+/* =========================================================
+   Leaderboard (gray glass)
+   ========================================================= */
 #leaderboard {
   position: fixed;
-  top: 20px;
-  right: 20px;
-  background: rgba(200, 200, 200, 0.15);
-  border: 2px solid #888;
+  top: 16px;
+  right: 16px;
+  width: 220px;
+  background: var(--panel-2);        /* translucent gray */
+  border: 2px solid var(--border);
   border-radius: 12px;
   padding: 10px 14px;
-  color: white;
-  font-family: 'Segoe UI', sans-serif;
-  font-size: 14px;
-  width: 200px;
-  box-shadow: 0 0 10px rgba(255,255,255,0.05);
+  color: var(--text);
   backdrop-filter: blur(6px);
+  z-index: 5;
+  box-shadow: 0 0 10px rgba(255,255,255,.05);
 }
 
 #leaderboard h3 {
-  margin-top: 0;
-  color: #ddd;
+  margin: 0 0 8px;
   font-size: 16px;
+  color: #ddd;
   border-bottom: 1px solid #777;
   padding-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#leaderboard ol,
+#leaderboard ul {
+  margin: 0;
+  padding-left: 18px;
+  list-style: decimal;
 }
 
 #leaderboard li {
-  list-style: none;
   margin: 4px 0;
   color: #eee;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* If you use a plain list without <ol> */
+#leaderboardList {
+  padding-left: 18px;
+  margin: 0;
+}
+
+/* =========================================================
+   Responsive tweaks
+   ========================================================= */
+@media (max-width: 640px) {
+  #leaderboard { width: 180px; top: 12px; right: 12px; }
+  #messages { height: 90px; }
+  #modalBox { width: calc(100% - 48px); }
+}
+
+/* =========================================================
+   Optional utility classes
+   ========================================================= */
+.hidden { display: none !important; }
+.center { display: grid; place-items: center; }
+.muted { color: var(--muted); }

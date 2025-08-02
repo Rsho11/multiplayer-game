@@ -223,6 +223,24 @@ function tryCraft(loop, p) {
 
     // reset trail to encourage new craft
     p.trail = [];
+
+// Put these near other constants:
+const PLAYER_RADIUS = 6;   // same as client sphere geometry radius
+const WALL_T = 3;          // same as client wall thickness
+
+// ... inside the setInterval physics loop, after integrating p.x/p.z:
+const halfW = ARENA.w / 2, halfH = ARENA.h / 2;
+
+// Inner faces (where player should stop)
+const maxX = halfW - WALL_T * 0.5 - PLAYER_RADIUS;
+const maxZ = halfH - WALL_T * 0.5 - PLAYER_RADIUS;
+
+// Clamp to inner faces and dampen on hit
+if (p.x < -maxX) { p.x = -maxX; p.vx = Math.abs(p.vx) * 0.4; }
+if (p.x >  maxX) { p.x =  maxX; p.vx = -Math.abs(p.vx) * 0.4; }
+if (p.z < -maxZ) { p.z = -maxZ; p.vz = Math.abs(p.vz) * 0.4; }
+if (p.z >  maxZ) { p.z =  maxZ; p.vz = -Math.abs(p.vz) * 0.4; }
+
   }
 }
 const teamOf = (p) => (p.team === "red" ? "red" : "blue");

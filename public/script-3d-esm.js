@@ -1,22 +1,25 @@
 // public/script-3d-esm.js
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/controls/OrbitControls.js";
+
+/* ------------------ Trail helper ------------------ */
 class Trail {
   constructor(scene, color = 0xffffff, maxSegs = 120, radius = 0.35, yOffset = 0.25) {
     this.maxSegs = maxSegs;
     this.radius = radius;
     this.yOffset = yOffset;
 
-    // A unit cylinder along +Y (we’ll scale/rotate it per-segment)
     const segGeom = new THREE.CylinderGeometry(radius, radius, 1, 8, 1);
-    // rotate to lay along Y already (THREE Cylinder is along Y by default)
     const mat = new THREE.MeshStandardMaterial({
       color,
       roughness: 0.6,
       metalness: 0.0,
       emissive: new THREE.Color(color).multiplyScalar(0.15),
       transparent: true,
-      opacity: 0.9
+      opacity: 0.9,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: 1,
     });
 
     this.mesh = new THREE.InstancedMesh(segGeom, mat, maxSegs);
@@ -24,8 +27,8 @@ class Trail {
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
 
-    this._last = null;            // last point
-    this._i = 0;                  // circular write index
+    this._last = null;
+    this._i = 0;
     this._mat4 = new THREE.Matrix4();
     this._quat = new THREE.Quaternion();
     this._vDir = new THREE.Vector3();
@@ -38,35 +41,21 @@ class Trail {
   }
 
   addPoint(x, y, z) {
-    // Slight lift so it floats over the floor
     y = this.yOffset;
+    if (!this._last) { this._last = new THREE.Vector3(x, y, z); return; }
 
-    if (!this._last) {
-      this._last = new THREE.Vector3(x, y, z);
-      return;
-    }
     const a = this._last;
     const b = new THREE.Vector3(x, y, z);
-
-    // ignore tiny segments (standing still)
     const len = a.distanceTo(b);
     if (len < 0.5) return;
 
-    // direction & midpoint
     this._vDir.copy(b).sub(a).normalize();
     this._mid.copy(a).add(b).multiplyScalar(0.5);
 
-    // rotate the unit Y cylinder to segment direction
-    // quaternion that rotates (0,1,0) to _vDir
     const up = new THREE.Vector3(0, 1, 0);
     this._quat.setFromUnitVectors(up, this._vDir);
 
-    // compose: position at midpoint, rotation, scale length on Y
-    this._mat4.compose(
-      this._mid,
-      this._quat,
-      new THREE.Vector3(1, len, 1) // scale Y to segment length
-    );
+    this._mat4.compose(this._mid, this._quat, new THREE.Vector3(1, len, 1));
 
     const i = this._i % this.maxSegs;
     this.mesh.setMatrixAt(i, this._mat4);
@@ -78,22 +67,20 @@ class Trail {
   }
 }
 
-const socket = io(); // If deploying on a different origin, use: io(window.location.origin, { transports: ["websocket"] })
+/* ------------------ Socket / UI ------------------ */
+const socket = io();
 console.log("[client] script-3d-esm.js loaded");
 
-// ====== UI (name + chat) ======
 let myName = "";
-const startBtn = document.getElementById("startGame");
-startBtn.onclick = () => {
+document.getElementById("startGame").onclick = () => {
   myName = document.getElementById("nameInput").value.trim();
   if (!myName) return alert("Please enter your name!");
   document.getElementById("nameModal").style.display = "none";
   const myColor = "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
-  console.log("[client] join ->", myName, myColor);
   socket.emit("join", { name: myName, color: myColor });
 };
 
-// chat
+// Chat
 const chatForm = document.getElementById("chatForm");
 const chatInput = document.getElementById("chatInput");
 const messages = document.getElementById("messages");
@@ -110,7 +97,7 @@ socket.on("chat", ({ name, text }) => {
   messages.scrollTop = messages.scrollHeight;
 });
 
-// leaderboard
+// Leaderboard
 const leaderboardList = document.getElementById("leaderboardList");
 function updateLeaderboard(snapshot) {
   const top = [...snapshot].sort((a,b)=>b.score-a.score).slice(0,10);
@@ -122,7 +109,7 @@ function updateLeaderboard(snapshot) {
   });
 }
 
-// ====== Three.js scene ======
+/* ------------------ Three.js Scene ------------------ */
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x131313);
 
@@ -131,46 +118,36 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// waiting overlay
+// "waiting" overlay
 const waitDiv = document.createElement("div");
-waitDiv.style.position = "fixed";
-waitDiv.style.top = "50%";
-waitDiv.style.left = "50%";
-waitDiv.style.transform = "translate(-50%, -50%)";
-waitDiv.style.color = "#ddd";
-waitDiv.style.font = "16px Segoe UI, sans-serif";
-waitDiv.style.padding = "8px 12px";
-waitDiv.style.background = "rgba(0,0,0,0.5)";
-waitDiv.style.border = "1px solid #444";
-waitDiv.style.borderRadius = "8px";
-waitDiv.style.zIndex = "4";
+Object.assign(waitDiv.style, {
+  position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
+  color: "#ddd", font: "16px Segoe UI, sans-serif", padding: "8px 12px",
+  background: "rgba(0,0,0,0.5)", border: "1px solid #444", borderRadius: "8px", zIndex: "4"
+});
 waitDiv.textContent = "Waiting for server state...";
 document.body.appendChild(waitDiv);
 
-// camera + orbit controls
+// Camera + Controls
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 4000);
-camera.position.set(0, 140, 260);
+camera.position.set(0, 170, 300);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
 controls.target.set(0, 6, 0);
 controls.minDistance = 90;
-controls.maxDistance = 360;
+controls.maxDistance = 700;
 controls.minPolarAngle = 0.2 * Math.PI;
 controls.maxPolarAngle = 0.49 * Math.PI;
 
-// brighter lights so floor is visible
-{
-  const amb = new THREE.AmbientLight(0xffffff, 0.45);
-  scene.add(amb);
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x333344, 0.6);
-  scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-  dir.position.set(200, 400, 200);
-  scene.add(dir);
-}
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+scene.add(new THREE.HemisphereLight(0xffffff, 0x333344, 0.6));
+const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+dir.position.set(200, 400, 200);
+scene.add(dir);
 
-// arena floor + borders
-const ARENA_W = 4048, ARENA_H = 4048;
+// Arena (MATCH SERVER SIZE)
+const ARENA_W = 2400, ARENA_H = 1600;   // must match index.js ARENA
 {
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(ARENA_W, ARENA_H),
@@ -189,96 +166,103 @@ const ARENA_W = 4048, ARENA_H = 4048;
   wallWest.position.set(-ARENA_W/2, wallH/2, 0);
   const wallEast  = wallWest.clone(); wallEast.position.x = ARENA_W/2;
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
-
 }
 
-// fallback origin marker
-
-const meGroup = new THREE.Group();
-scene.add(meGroup);
-let meSphere = null;
-const otherMeshes = new Map(); // id -> {group, mesh, label}
-// Trails
-const meTrail = new Trail(scene, 0xeeeeee, 150, 0.35, 0.25);  // local player (brighter)
-const otherTrails = new Map(); // id -> Trail
-
-
-
-// --- Fabric "yarn" décor on the floor (fast instancing) ---
+/* -------- Optional: Fabric décor (instanced) -------- */
 (function addYarnDecor() {
-  // Palette of soft yarn tones
   const palette = [0xD9747A, 0x6AA9FF, 0x9EE09E, 0xE7C77A, 0xCE98F7, 0xF2A65A, 0x84DCC6];
+  const pick = () => palette[(Math.random() * palette.length) | 0];
 
-  // Helper to pick a palette color
-  const pickColor = () => palette[(Math.random() * palette.length) | 0];
-
-  // 1) Loops of thread (thin torus lying on the floor)
-  const loopCount = 300;                         // adjust density here
-  const loopGeom  = new THREE.TorusGeometry(6, 0.35, 8, 24); // radius, tube, radial/tubular segments
+  const loopCount = 300, strandCount = 300;
+  const loopGeom  = new THREE.TorusGeometry(6, 0.35, 8, 24);
   const loopMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0 });
   const loopMesh  = new THREE.InstancedMesh(loopGeom, loopMat, loopCount);
   loopMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(loopMesh);
 
-  // 2) Short strands (thin cylinders laid sideways)
-  const strandCount = 300;
   const strandGeom = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
   const strandMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.0 });
   const strandMesh = new THREE.InstancedMesh(strandGeom, strandMat, strandCount);
   strandMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   scene.add(strandMesh);
 
-  const pos = new THREE.Vector3();
-  const quat = new THREE.Quaternion();
-  const scale = new THREE.Vector3();
-  const m4 = new THREE.Matrix4();
+  const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3(), m4 = new THREE.Matrix4();
+  const halfW = ARENA_W / 2 - 30, halfH = ARENA_H / 2 - 30;
 
-  // scatter helper
-  const halfW = ARENA_W / 2 - 30;   // keep a little margin from walls
-  const halfH = ARENA_H / 2 - 30;
-
-  // place loops
   for (let i = 0; i < loopCount; i++) {
-    pos.set(
-      (Math.random() * 2 - 1) * halfW,
-      0.2,
-      (Math.random() * 2 - 1) * halfH
-    );
-    // random yaw
-    const yaw = Math.random() * Math.PI * 2;
-    quat.setFromEuler(new THREE.Euler(-Math.PI/2, yaw, 0)); // lay flat on floor then rotate around Y
-    // slight size variance
-    const s = 0.7 + Math.random() * 0.8;
-    scale.set(s, s, s);
-    m4.compose(pos, quat, scale);
+    pos.set((Math.random()*2-1)*halfW, 0.2, (Math.random()*2-1)*halfH);
+    quat.setFromEuler(new THREE.Euler(-Math.PI/2, Math.random()*Math.PI*2, 0));
+    const s = 0.7 + Math.random()*0.8; scl.set(s,s,s);
+    m4.compose(pos, quat, scl);
     loopMesh.setMatrixAt(i, m4);
-    loopMesh.setColorAt(i, new THREE.Color(pickColor()));
+    loopMesh.setColorAt(i, new THREE.Color(pick()));
   }
-  loopMesh.instanceColor.needsUpdate = true;
   loopMesh.instanceMatrix.needsUpdate = true;
+  loopMesh.instanceColor.needsUpdate = true;
 
-  // place strands
   for (let i = 0; i < strandCount; i++) {
-    pos.set(
-      (Math.random() * 2 - 1) * halfW,
-      0.25,
-      (Math.random() * 2 - 1) * halfH
-    );
-    // lay on floor, random yaw
-    const yaw = Math.random() * Math.PI * 2;
-    quat.setFromEuler(new THREE.Euler(0, yaw, Math.PI/2)); // rotate cylinder sideways
-    // random length scaling
-    const len = 0.7 + Math.random() * 1.6;
-    scale.set(1, len, 1);
-    m4.compose(pos, quat, scale);
+    pos.set((Math.random()*2-1)*halfW, 0.25, (Math.random()*2-1)*halfH);
+    quat.setFromEuler(new THREE.Euler(0, Math.random()*Math.PI*2, Math.PI/2));
+    const len = 0.7 + Math.random()*1.6; scl.set(1, len, 1);
+    m4.compose(pos, quat, scl);
     strandMesh.setMatrixAt(i, m4);
-    strandMesh.setColorAt(i, new THREE.Color(pickColor()));
+    strandMesh.setColorAt(i, new THREE.Color(pick()));
   }
-  strandMesh.instanceColor.needsUpdate = true;
   strandMesh.instanceMatrix.needsUpdate = true;
+  strandMesh.instanceColor.needsUpdate = true;
 })();
 
+/* ---------------- Territory Fabric (tiles) ---------------- */
+const tileGeom = new THREE.PlaneGeometry(58, 58);
+tileGeom.rotateX(-Math.PI/2);
+const redMat  = new THREE.MeshStandardMaterial({ color: 0xff6a6a, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 0.35 });
+const blueMat = new THREE.MeshStandardMaterial({ color: 0x6aa9ff, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 0.35 });
 
+const MAX_TILES = ((ARENA_W / 60) * (ARENA_H / 60) + 200) | 0;
+const redMesh  = new THREE.InstancedMesh(tileGeom, redMat,  MAX_TILES);
+const blueMesh = new THREE.InstancedMesh(tileGeom, blueMat, MAX_TILES);
+redMesh.count = 0; blueMesh.count = 0;
+scene.add(redMesh, blueMesh);
+
+const redIndex  = new Map();
+const blueIndex = new Map();
+const m4 = new THREE.Matrix4();
+
+function cellKey(c,r){ return `${c},${r}`; }
+function cellCenter(c,r){
+  return new THREE.Vector3(
+    c*60 - ARENA_W/2 + 30,
+    0.08,
+    r*60 - ARENA_H/2 + 30
+  );
+}
+function setTile(mesh, map, c, r){
+  const key = cellKey(c,r);
+  if (map.has(key)) return;
+  const i = mesh.count++;
+  const pos = cellCenter(c,r);
+  m4.makeTranslation(pos.x, pos.y, pos.z);
+  mesh.setMatrixAt(i, m4);
+  map.set(key, i);
+  mesh.instanceMatrix.needsUpdate = true;
+}
+function clearTile(mesh, map, c, r){
+  const key = cellKey(c,r);
+  const i = map.get(key);
+  if (i === undefined) return;
+  const last = mesh.count - 1;
+  if (i !== last) {
+    const tmp = new THREE.Matrix4();
+    mesh.getMatrixAt(last, tmp);
+    mesh.setMatrixAt(i, tmp);
+    for (const [k, idx] of map) { if (idx === last){ map.set(k, i); break; } }
+  }
+  mesh.count = Math.max(0, mesh.count - 1);
+  map.delete(key);
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+/* ---------------- Labels & Player Groups ---------------- */
 function makeLabelCanvas(text) {
   const cnv = document.createElement("canvas");
   const ctx = cnv.getContext("2d");
@@ -298,7 +282,14 @@ function makeLabelCanvas(text) {
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
 }
 
-// ====== Input: WASD relative to camera ======
+const meGroup = new THREE.Group();
+scene.add(meGroup);
+let meSphere = null;
+const otherMeshes = new Map();
+const meTrail = new Trail(scene, 0xeeeeee, 150, 0.35, 0.25);
+const otherTrails = new Map();
+
+/* ---------------- Input & Send ---------------- */
 const keys = {};
 window.addEventListener("keydown", (e) => {
   if (/input|textarea/i.test(e.target.tagName)) return;
@@ -325,34 +316,51 @@ function sendInput() {
 }
 setInterval(sendInput, 1000 / 30);
 
-// ====== Networking: apply server snapshot ======
+/* ---------------- Network handlers ---------------- */
+socket.on("territoryUpdate", (cells) => {
+  for (const { c, r, team, level } of cells) {
+    if (team === "red" && level > 0) {
+      setTile(redMesh, redIndex, c, r);
+      clearTile(blueMesh, blueIndex, c, r);
+    } else if (team === "blue" && level > 0) {
+      setTile(blueMesh, blueIndex, c, r);
+      clearTile(redMesh, redIndex, c, r);
+    } else {
+      clearTile(redMesh, redIndex, c, r);
+      clearTile(blueMesh, blueIndex, c, r);
+    }
+  }
+});
+socket.on("teamScore", (t) => {
+  const title = document.querySelector("#leaderboard h3");
+  if (title) title.textContent = `🏆 Leaderboard  —  🔴 ${t.red}  |  🔵 ${t.blue}`;
+});
+
 socket.on("state3d", (snapshot) => {
   waitDiv.style.display = "none";
   updateLeaderboard(snapshot);
-if (meSphere) {
-  meGroup.position.set(p.x, p.y, p.z);
-  meTrail.addPoint(p.x, p.y, p.z);
-  controls.target.lerp(new THREE.Vector3(p.x, p.y, p.z), 0.2);
-}
 
+  // Local player
   const mine = snapshot.find(p => p.id === socket.id);
-  if (mine && !meSphere) {
-    const geom = new THREE.SphereGeometry(6, 24, 18);
-    const mat = new THREE.MeshStandardMaterial({ color: mine.color || 0x66ccff, metalness: 0.1, roughness: 0.6 });
-    meSphere = new THREE.Mesh(geom, mat);
-    meGroup.add(meSphere);
-    controls.target.set(mine.x, 6, mine.z);
+  if (mine) {
+    if (!meSphere) {
+      const geom = new THREE.SphereGeometry(6, 24, 18);
+      const mat = new THREE.MeshStandardMaterial({ color: mine.color || 0x66ccff, metalness: 0.1, roughness: 0.6 });
+      meSphere = new THREE.Mesh(geom, mat);
+      meGroup.add(meSphere);
+      controls.target.set(mine.x, 6, mine.z);
+    }
+    meGroup.position.set(mine.x, mine.y, mine.z);
+    meTrail.addPoint(mine.x, mine.y, mine.z);
+    controls.target.lerp(new THREE.Vector3(mine.x, mine.y, mine.z), 0.2);
   }
 
+  // Others
   const seen = new Set();
+  if (mine) seen.add(mine.id);
+
   for (const p of snapshot) {
-    if (p.id === socket.id) {
-      if (meSphere) {
-        meGroup.position.set(p.x, p.y, p.z);
-        controls.target.lerp(new THREE.Vector3(p.x, p.y, p.z), 0.2);
-      }
-      continue;
-    }
+    if (p.id === socket.id) continue;
     seen.add(p.id);
 
     if (!otherMeshes.has(p.id)) {
@@ -368,32 +376,31 @@ if (meSphere) {
     }
     const entry = otherMeshes.get(p.id);
     entry.group.position.set(p.x, p.y, p.z);
-    // ensure a trail exists for this player
-if (!otherTrails.has(p.id)) {
-  const color = new THREE.Color(p.color || 0xffaa00).offsetHSL(0, -0.2, -0.1).getHex();
-  otherTrails.set(p.id, new Trail(scene, color, 90, 0.28, 0.22));
-}
-otherTrails.get(p.id).addPoint(p.x, p.y, p.z);
 
+    if (!otherTrails.has(p.id)) {
+      const color = new THREE.Color(p.color || 0xffaa00).offsetHSL(0, -0.2, -0.1).getHex();
+      otherTrails.set(p.id, new Trail(scene, color, 90, 0.28, 0.22));
+    }
+    otherTrails.get(p.id).addPoint(p.x, p.y, p.z);
   }
 
-  // remove stale
+  // Cleanup
   for (const [id, obj] of otherMeshes) {
     if (!seen.has(id)) {
       scene.remove(obj.group);
       otherMeshes.delete(id);
+      const tr = otherTrails.get(id);
+      if (tr) {
+        scene.remove(tr.mesh);
+        tr.mesh.geometry.dispose();
+        tr.mesh.material.dispose();
+        otherTrails.delete(id);
+      }
     }
   }
 });
-const trail = otherTrails.get(id);
-if (trail) {
-  scene.remove(trail.mesh);
-  trail.mesh.geometry.dispose();
-  trail.mesh.material.dispose();
-  otherTrails.delete(id);
-}
 
-// ====== Render loop ======
+/* ---------------- Render Loop ---------------- */
 function animate() {
   requestAnimationFrame(animate);
   controls.update();
@@ -401,7 +408,6 @@ function animate() {
 }
 animate();
 
-// resize
 window.addEventListener("resize", () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
   camera.aspect = window.innerWidth / window.innerHeight;

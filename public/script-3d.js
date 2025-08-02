@@ -118,6 +118,63 @@ const ARENA_W = 1200, ARENA_H = 800;
   scene.add(grid);
 }
 
+
+// ---- Territory fabric tiles (per team) ----
+const tileGeom = new THREE.PlaneGeometry(58, 58);
+tileGeom.rotateX(-Math.PI/2);
+const redMat  = new THREE.MeshStandardMaterial({ color: 0xff6a6a, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 0.35 });
+const blueMat = new THREE.MeshStandardMaterial({ color: 0x6aa9ff, roughness: 0.9, metalness: 0.05, transparent: true, opacity: 0.35 });
+
+const MAX_TILES = (ARENA_W / 60) * (ARENA_H / 60) + 200;
+const redMesh  = new THREE.InstancedMesh(tileGeom, redMat,  MAX_TILES|0);
+const blueMesh = new THREE.InstancedMesh(tileGeom, blueMat, MAX_TILES|0);
+redMesh.count = 0; blueMesh.count = 0;
+scene.add(redMesh, blueMesh);
+
+// map cell "r,c" -> instance index for quick updates
+const redIndex  = new Map();
+const blueIndex = new Map();
+
+function cellKey(c,r){ return `${c},${r}`; }
+function cellCenter(c,r){
+  return new THREE.Vector3(
+    c*60 - ARENA_W/2 + 30,
+    0.05,
+    r*60 - ARENA_H/2 + 30
+  );
+}
+const m4 = new THREE.Matrix4();
+function setTile(mesh, map, c, r){
+  const key = cellKey(c,r);
+  if (map.has(key)) return; // already placed
+  const i = mesh.count++;
+  const pos = cellCenter(c,r);
+  m4.makeTranslation(pos.x, pos.y, pos.z);
+  mesh.setMatrixAt(i, m4);
+  map.set(key, i);
+  mesh.instanceMatrix.needsUpdate = true;
+}
+function clearTile(mesh, map, c, r){
+  const key = cellKey(c,r);
+  const i = map.get(key);
+  if (i === undefined) return;
+  // swap-remove last
+  const last = mesh.count - 1;
+  if (i !== last) {
+    const tmp = new THREE.Matrix4();
+    mesh.getMatrixAt(last, tmp);
+    mesh.setMatrixAt(i, tmp);
+    // update map for moved instance
+    for (const [k, idx] of map) {
+      if (idx === last){ map.set(k, i); break; }
+    }
+  }
+  mesh.count = Math.max(0, mesh.count - 1);
+  map.delete(key);
+  mesh.instanceMatrix.needsUpdate = true;
+}
+
+
 // fallback origin marker (so you see *something* even before snapshots)
 {
   const cross = new THREE.AxesHelper(20);

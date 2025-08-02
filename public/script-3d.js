@@ -76,7 +76,7 @@ const controls = new THREE.OrbitControls(camera, renderer.domElement);
 controls.enablePan = false;
 controls.target.set(0, 6, 0);
 controls.minDistance = 90;
-controls.maxDistance = 360;
+controls.maxDistance = 700;
 controls.minPolarAngle = 0.2 * Math.PI;
 controls.maxPolarAngle = 0.49 * Math.PI;
 
@@ -92,7 +92,7 @@ controls.maxPolarAngle = 0.49 * Math.PI;
 }
 
 // arena floor + border walls (high-contrast)
-const ARENA_W = 1200, ARENA_H = 800;
+const ARENA_W = 2400, ARENA_H = 1600;
 {
   const floorMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.9, metalness: 0.0 });
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(ARENA_W, ARENA_H), floorMat);
@@ -112,11 +112,56 @@ const ARENA_W = 1200, ARENA_H = 800;
   const wallEast  = wallWest.clone(); wallEast.position.x = ARENA_W/2;
 
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
-
-  const grid = new THREE.GridHelper(ARENA_W, 40, 0x444444, 0x2a2a2a);
-  grid.position.y = 0.05;
-  scene.add(grid);
+const cross = new THREE.AxesHelper(20);
+cross.position.set(0, 1, 0);
+scene.add(cross);
 }
+// --- Fabric "yarn" décor on the floor (fast instancing) ---
+(function addYarnDecor() {
+  const palette = [0xD9747A, 0x6AA9FF, 0x9EE09E, 0xE7C77A, 0xCE98F7, 0xF2A65A, 0x84DCC6];
+  const pick = () => palette[(Math.random() * palette.length) | 0];
+
+  // Loops
+  const loopCount = 300;
+  const loopGeom  = new THREE.TorusGeometry(6, 0.35, 8, 24);
+  const loopMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0 });
+  const loopMesh  = new THREE.InstancedMesh(loopGeom, loopMat, loopCount);
+  loopMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(loopMesh);
+
+  // Strands
+  const strandCount = 300;
+  const strandGeom = new THREE.CylinderGeometry(0.2, 0.2, 8, 8);
+  const strandMat  = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85, metalness: 0.0 });
+  const strandMesh = new THREE.InstancedMesh(strandGeom, strandMat, strandCount);
+  strandMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  scene.add(strandMesh);
+
+  const pos = new THREE.Vector3(), quat = new THREE.Quaternion(), scl = new THREE.Vector3(), m = new THREE.Matrix4();
+  const halfW = ARENA_W / 2 - 30, halfH = ARENA_H / 2 - 30;
+
+  for (let i = 0; i < loopCount; i++) {
+    pos.set((Math.random()*2-1)*halfW, 0.2, (Math.random()*2-1)*halfH);
+    quat.setFromEuler(new THREE.Euler(-Math.PI/2, Math.random()*Math.PI*2, 0));
+    const s = 0.7 + Math.random()*0.8; scl.set(s,s,s);
+    m.compose(pos, quat, scl);
+    loopMesh.setMatrixAt(i, m);
+    loopMesh.setColorAt(i, new THREE.Color(pick()));
+  }
+  loopMesh.instanceMatrix.needsUpdate = true;
+  loopMesh.instanceColor.needsUpdate = true;
+
+  for (let i = 0; i < strandCount; i++) {
+    pos.set((Math.random()*2-1)*halfW, 0.25, (Math.random()*2-1)*halfH);
+    quat.setFromEuler(new THREE.Euler(0, Math.random()*Math.PI*2, Math.PI/2));
+    const len = 0.7 + Math.random()*1.6; scl.set(1, len, 1);
+    m.compose(pos, quat, scl);
+    strandMesh.setMatrixAt(i, m);
+    strandMesh.setColorAt(i, new THREE.Color(pick()));
+  }
+  strandMesh.instanceMatrix.needsUpdate = true;
+  strandMesh.instanceColor.needsUpdate = true;
+})();
 
 
 // ---- Territory fabric tiles (per team) ----
@@ -288,6 +333,28 @@ socket.on("state3d", (snapshot) => {
     }
   }
 });
+
+socket.on("territoryUpdate", (cells) => {
+  // cells: [{c,r,team,level}]
+  for (const { c, r, team, level } of cells) {
+    if (team === "red" && level > 0) {
+      setTile(redMesh, redIndex, c, r);
+      clearTile(blueMesh, blueIndex, c, r);
+    } else if (team === "blue" && level > 0) {
+      setTile(blueMesh, blueIndex, c, r);
+      clearTile(redMesh, redIndex, c, r);
+    } else {
+      clearTile(redMesh, redIndex, c, r);
+      clearTile(blueMesh, blueIndex, c, r);
+    }
+  }
+});
+
+socket.on("teamScore", (t) => {
+  const title = document.querySelector("#leaderboard h3");
+  if (title) title.textContent = `🏆 Leaderboard  —  🔴 ${t.red}  |  🔵 ${t.blue}`;
+});
+
 
 // ====== Render loop ======
 function animate() {

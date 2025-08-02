@@ -7,7 +7,7 @@ const io = require("socket.io")(http);
 app.use(express.static("public"));
 
 /* ---------- Arena + Physics ---------- */
-const ARENA = { w: 2400, h: 1600 };   // bigger map
+const ARENA = { w: 4048, h: 4048 };   // bigger map
 const TICK_HZ = 60;
 const DT = 1 / TICK_HZ;
 const ACCEL = 90 * DT;

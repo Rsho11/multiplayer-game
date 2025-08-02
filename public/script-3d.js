@@ -112,9 +112,7 @@ const ARENA_W = 2400, ARENA_H = 1600;
   const wallEast  = wallWest.clone(); wallEast.position.x = ARENA_W/2;
 
   scene.add(wallNorth, wallSouth, wallWest, wallEast);
-const cross = new THREE.AxesHelper(20);
-cross.position.set(0, 1, 0);
-scene.add(cross);
+
 }
 // --- Fabric "yarn" décor on the floor (fast instancing) ---
 (function addYarnDecor() {
@@ -220,12 +218,6 @@ function clearTile(mesh, map, c, r){
 }
 
 
-// fallback origin marker (so you see *something* even before snapshots)
-{
-  const cross = new THREE.AxesHelper(20);
-  cross.position.set(0, 1, 0);
-  scene.add(cross);
-}
 
 const meGroup = new THREE.Group();
 scene.add(meGroup);

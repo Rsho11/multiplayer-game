@@ -1,6 +1,82 @@
 // public/script-3d-esm.js
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/controls/OrbitControls.js";
+class Trail {
+  constructor(scene, color = 0xffffff, maxSegs = 120, radius = 0.35, yOffset = 0.25) {
+    this.maxSegs = maxSegs;
+    this.radius = radius;
+    this.yOffset = yOffset;
+
+    // A unit cylinder along +Y (we’ll scale/rotate it per-segment)
+    const segGeom = new THREE.CylinderGeometry(radius, radius, 1, 8, 1);
+    // rotate to lay along Y already (THREE Cylinder is along Y by default)
+    const mat = new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.6,
+      metalness: 0.0,
+      emissive: new THREE.Color(color).multiplyScalar(0.15),
+      transparent: true,
+      opacity: 0.9
+    });
+
+    this.mesh = new THREE.InstancedMesh(segGeom, mat, maxSegs);
+    this.mesh.count = 0;
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(this.mesh);
+
+    this._last = null;            // last point
+    this._i = 0;                  // circular write index
+    this._mat4 = new THREE.Matrix4();
+    this._quat = new THREE.Quaternion();
+    this._vDir = new THREE.Vector3();
+    this._mid = new THREE.Vector3();
+  }
+
+  reset() {
+    this.mesh.count = 0;
+    this._last = null;
+  }
+
+  addPoint(x, y, z) {
+    // Slight lift so it floats over the floor
+    y = this.yOffset;
+
+    if (!this._last) {
+      this._last = new THREE.Vector3(x, y, z);
+      return;
+    }
+    const a = this._last;
+    const b = new THREE.Vector3(x, y, z);
+
+    // ignore tiny segments (standing still)
+    const len = a.distanceTo(b);
+    if (len < 0.5) return;
+
+    // direction & midpoint
+    this._vDir.copy(b).sub(a).normalize();
+    this._mid.copy(a).add(b).multiplyScalar(0.5);
+
+    // rotate the unit Y cylinder to segment direction
+    // quaternion that rotates (0,1,0) to _vDir
+    const up = new THREE.Vector3(0, 1, 0);
+    this._quat.setFromUnitVectors(up, this._vDir);
+
+    // compose: position at midpoint, rotation, scale length on Y
+    this._mat4.compose(
+      this._mid,
+      this._quat,
+      new THREE.Vector3(1, len, 1) // scale Y to segment length
+    );
+
+    const i = this._i % this.maxSegs;
+    this.mesh.setMatrixAt(i, this._mat4);
+    this.mesh.count = Math.min(this.mesh.count + 1, this.maxSegs);
+    this.mesh.instanceMatrix.needsUpdate = true;
+
+    this._last = b;
+    this._i++;
+  }
+}
 
 const socket = io(); // If deploying on a different origin, use: io(window.location.origin, { transports: ["websocket"] })
 console.log("[client] script-3d-esm.js loaded");
@@ -122,6 +198,10 @@ const meGroup = new THREE.Group();
 scene.add(meGroup);
 let meSphere = null;
 const otherMeshes = new Map(); // id -> {group, mesh, label}
+// Trails
+const meTrail = new Trail(scene, 0xeeeeee, 150, 0.35, 0.25);  // local player (brighter)
+const otherTrails = new Map(); // id -> Trail
+
 
 
 // --- Fabric "yarn" décor on the floor (fast instancing) ---
@@ -249,6 +329,11 @@ setInterval(sendInput, 1000 / 30);
 socket.on("state3d", (snapshot) => {
   waitDiv.style.display = "none";
   updateLeaderboard(snapshot);
+if (meSphere) {
+  meGroup.position.set(p.x, p.y, p.z);
+  meTrail.addPoint(p.x, p.y, p.z);
+  controls.target.lerp(new THREE.Vector3(p.x, p.y, p.z), 0.2);
+}
 
   const mine = snapshot.find(p => p.id === socket.id);
   if (mine && !meSphere) {
@@ -283,6 +368,13 @@ socket.on("state3d", (snapshot) => {
     }
     const entry = otherMeshes.get(p.id);
     entry.group.position.set(p.x, p.y, p.z);
+    // ensure a trail exists for this player
+if (!otherTrails.has(p.id)) {
+  const color = new THREE.Color(p.color || 0xffaa00).offsetHSL(0, -0.2, -0.1).getHex();
+  otherTrails.set(p.id, new Trail(scene, color, 90, 0.28, 0.22));
+}
+otherTrails.get(p.id).addPoint(p.x, p.y, p.z);
+
   }
 
   // remove stale
@@ -293,6 +385,13 @@ socket.on("state3d", (snapshot) => {
     }
   }
 });
+const trail = otherTrails.get(id);
+if (trail) {
+  scene.remove(trail.mesh);
+  trail.mesh.geometry.dispose();
+  trail.mesh.material.dispose();
+  otherTrails.delete(id);
+}
 
 // ====== Render loop ======
 function animate() {

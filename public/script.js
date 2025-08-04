@@ -62,7 +62,7 @@ function drawBorders() {
   ctx.strokeRect(0, 0, canvas.width, canvas.height);
 }
 
-// 🚶 Movement
+/ 🚶 
 function sendInput() {
   let dx = 0, dy = 0;
   if (keys["w"]) dy = -1;
@@ -93,12 +93,13 @@ function draw() {
 
   for (let id in players) {
     const p = players[id];
-    ctx.fillStyle = p.color;
+    ctx. = p.color;
     ctx.beginPath();
     ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-    ctx.fill();
 
-    // name tag
+      ctx.fill();
+
+     // name tag
     ctx.fillStyle = "#ccc";
     ctx.font = "12px sans-serif";
     ctx.textAlign = "center";

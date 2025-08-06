@@ -9,7 +9,7 @@ const startBtn = document.getElementById('startBtn');
 const nameInput = document.getElementById('nameInput');
 const colorHexEl = document.getElementById('colorHex');
 const previewWrap = document.getElementById('previewWrap');
-
+const cameraOffset = new THREE.Vector3(0, 6, 10);
 const socket = window.io();
 
 // ----------------- Main Game Scene -----------------
@@ -52,8 +52,6 @@ let targetPos = null;
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
-
-const cameraOffset = new THREE.Vector3(0, 6, 10);
 
 // tint materials robustly
 // --- REPLACE your existing applyColor with this ---
@@ -145,6 +143,9 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
   if (name) root.add(makeNameTag(name));
 
   if (isLocal) {
+      const start = root.position.clone().add(cameraOffset);
+  camera.position.copy(start);
+  camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
     addEventListener('click', (e) => {
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
@@ -169,13 +170,23 @@ function updateLocal(dt) {
   }
 }
 
+// Smooth chase camera
 function updateCamera(dt) {
   if (!myId) return;
-  const me = players.get(myId); if (!me) return;
+  const me = players.get(myId);
+  if (!me) return;
+
+  // where we want the camera to be
   const desired = me.position.clone().add(cameraOffset);
-  camera.position.lerp(desired, 0.12);
+
+  // dt-aware smoothing (stable across frame rates)
+  const smooth = 1 - Math.pow(0.0001, dt);  // ≈0.12 at 60fps
+  camera.position.lerp(desired, smooth);
+
+  // look slightly above the player’s center
   camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
 }
+
 
 // resize
 addEventListener('resize', () => {

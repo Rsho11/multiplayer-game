@@ -1,7 +1,7 @@
 {
   "name": "mp-fbx-multiplayer",
   "version": "1.0.0",
-  "description": "Three.js FBX multiplayer starter (CDN modules, no bundler)",
+  "description": "Three.js FBX multiplayer (no bundler, CDN modules)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"

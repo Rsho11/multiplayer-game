@@ -1,17 +1,20 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>Multiplayer FBX Game</title>
-    <style>
-        body { margin: 0; overflow: hidden; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Multiplayer FBX Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { overflow: hidden; background: #0b0e16; }
+    #debug { position: fixed; left: 8px; top: 8px; padding: 6px 8px; background: rgba(0,0,0,.4); color: #cbd5e1; font: 12px/1.4 system-ui, sans-serif; border-radius: 6px; }
+  </style>
 </head>
 <body>
-    <!-- Load socket.io first so main.js can use it -->
-    <script src="/socket.io/socket.io.js"></script>
-
-    <!-- Load our main script as a JavaScript module -->
-    <script type="module" src="main.js"></script>
+  <div id="debug">Connecting…</div>
+  <!-- Socket.IO client (served by the server) -->
+  <script src="/socket.io/socket.io.js"></script>
+  <!-- Main logic as an ES module -->
+  <script type="module" src="main.js"></script>
 </body>
 </html>

@@ -1,60 +1,67 @@
 const socket = io();
 
-// Scene setup
+// Scene
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-camera.position.z = 5;
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(0, 10, 10);
+scene.add(light);
 
-let cubes = {};
+camera.position.set(0, 3, 8);
 
-function createCube(color = 0x00ff00) {
-    const geometry = new THREE.BoxGeometry();
-    const material = new THREE.MeshBasicMaterial({ color });
-    return new THREE.Mesh(geometry, material);
+let players = {};
+const loader = new THREE.FBXLoader();
+
+function loadPlayerModel(id, position, isLocal) {
+    loader.load("/models/player.fbx", (object) => {
+        object.scale.set(0.01, 0.01, 0.01);
+        object.position.set(position.x, position.y, position.z);
+        scene.add(object);
+        players[id] = object;
+
+        if (isLocal) {
+            document.addEventListener("keydown", (event) => {
+                if (!players[socket.id]) return;
+                if (event.key === "w") object.position.z -= 0.1;
+                if (event.key === "s") object.position.z += 0.1;
+                if (event.key === "a") object.position.x -= 0.1;
+                if (event.key === "d") object.position.x += 0.1;
+                socket.emit("move", {
+                    x: object.position.x,
+                    y: object.position.y,
+                    z: object.position.z
+                });
+            });
+        }
+    });
 }
 
-socket.on("currentPlayers", (players) => {
-    for (let id in players) {
-        const cube = createCube(id === socket.id ? 0x0000ff : 0xff0000);
-        cube.position.set(players[id].x, players[id].y, players[id].z);
-        scene.add(cube);
-        cubes[id] = cube;
+// Socket events
+socket.on("currentPlayers", (data) => {
+    for (let id in data) {
+        loadPlayerModel(id, data[id], id === socket.id);
     }
 });
 
 socket.on("newPlayer", (player) => {
-    const cube = createCube(0xff0000);
-    cube.position.set(player.x, player.y, player.z);
-    scene.add(cube);
-    cubes[player.id] = cube;
+    loadPlayerModel(player.id, player, false);
 });
 
 socket.on("playerMoved", (player) => {
-    if (cubes[player.id]) {
-        cubes[player.id].position.set(player.x, player.y, player.z);
+    if (players[player.id]) {
+        players[player.id].position.set(player.x, player.y, player.z);
     }
 });
 
 socket.on("removePlayer", (id) => {
-    if (cubes[id]) {
-        scene.remove(cubes[id]);
-        delete cubes[id];
+    if (players[id]) {
+        scene.remove(players[id]);
+        delete players[id];
     }
-});
-
-// Movement
-document.addEventListener("keydown", (event) => {
-    let cube = cubes[socket.id];
-    if (!cube) return;
-    if (event.key === "w") cube.position.z -= 0.1;
-    if (event.key === "s") cube.position.z += 0.1;
-    if (event.key === "a") cube.position.x -= 0.1;
-    if (event.key === "d") cube.position.x += 0.1;
-    socket.emit("move", { x: cube.position.x, y: cube.position.y, z: cube.position.z });
 });
 
 function animate() {

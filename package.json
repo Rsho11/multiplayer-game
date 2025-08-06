@@ -1,14 +1,12 @@
 {
-  "name": "simple-fbx-click-move-game",
+  "name": "multiplayer-threejs-game",
   "version": "1.0.0",
-  "description": "Simple FBX click-to-move game inside building",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "express": "^4.18.2",
-    "socket.io": "^4.7.2",
-    "three": "^0.160.0"
+    "socket.io": "^4.7.5"
   }
 }

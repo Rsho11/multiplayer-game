@@ -1,123 +1,86 @@
-const socket = io();
-let canvas = document.querySelector("canvas");
-let ctx = canvas.getContext("2d");
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/FBXLoader.js';
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+let renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-let players = {};
-let me = null;
-let trails = {};
-let myName = "";
-let myColor = "#" + Math.floor(Math.random() * 16777215).toString(16);
-let team = Math.random() < 0.5 ? 'red' : 'blue';
-let keys = {};
+// Light
+const ambient = new THREE.AmbientLight(0xffffff, 0.8);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(5, 10, 7.5);
+scene.add(dirLight);
 
-// 🚪 Start game after name input
-document.getElementById("startGame").onclick = () => {
-  myName = document.getElementById("nameInput").value.trim();
-  if (myName.length < 1) return alert("Please enter your name!");
-  document.getElementById("nameModal").style.display = "none";
-  socket.emit("join", { name: myName, color: myColor, team });
-};
+// Floor
+const floorGeo = new THREE.PlaneGeometry(20, 20);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x888888 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.name = "floor";
+scene.add(floor);
 
-window.addEventListener("keydown", e => keys[e.key] = true);
-window.addEventListener("keyup", e => keys[e.key] = false);
+// Walls (simple building)
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x555555 });
+const wallGeo = new THREE.BoxGeometry(20, 3, 0.2);
+let wall1 = new THREE.Mesh(wallGeo, wallMat);
+wall1.position.set(0, 1.5, -10);
+scene.add(wall1);
 
-socket.on("update", serverPlayers => {
-  players = serverPlayers;
-  me = players[socket.id];
+let wall2 = wall1.clone();
+wall2.position.set(0, 1.5, 10);
+scene.add(wall2);
 
-  for (let id in players) {
-    if (!trails[id]) trails[id] = [];
-    trails[id].push({ x: players[id].x, y: players[id].y });
-    if (trails[id].length > 50) trails[id].shift();
+let wall3 = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 20), wallMat);
+wall3.position.set(-10, 1.5, 0);
+scene.add(wall3);
+
+let wall4 = wall3.clone();
+wall4.position.set(10, 1.5, 0);
+scene.add(wall4);
+
+// FBX Model
+let mixer;
+let character;
+const loader = new FBXLoader();
+loader.load('/models/User.fbx', (fbx) => {
+  character = fbx;
+  character.scale.set(0.01, 0.01, 0.01);
+  scene.add(character);
+  character.position.set(0, 0, 0);
+});
+
+camera.position.set(0, 5, 10);
+camera.lookAt(0, 0, 0);
+
+// Click to move
+let targetPosition = null;
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+window.addEventListener('click', (event) => {
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects([floor]);
+  if (intersects.length > 0) {
+    targetPosition = intersects[0].point.clone();
+    targetPosition.y = 0;
   }
 });
 
-// 🧵 Chat
-const chatForm = document.getElementById("chatForm");
-const chatInput = document.getElementById("chatInput");
-const messages = document.getElementById("messages");
-
-chatForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  const msg = chatInput.value.trim();
-  if (msg) {
-    socket.emit("chat", msg);
-    chatInput.value = "";
-  }
-});
-
-socket.on("chat", ({ id, text }) => {
-  const div = document.createElement("div");
-  const name = players[id]?.name || "Unknown";
-  div.innerHTML = `<strong>${name}:</strong> ${text}`;
-  messages.appendChild(div);
-  messages.scrollTop = messages.scrollHeight;
-});
-function drawBorders() {
-  ctx.strokeStyle = "#444";
-  ctx.lineWidth = 4;
-  ctx.strokeRect(0, 0, canvas.width, canvas.height);
-}
-
-/ 🚶 
-function sendInput() {
-  let dx = 0, dy = 0;
-  if (keys["w"]) dy = -1;
-  if (keys["s"]) dy = 1;
-  if (keys["a"]) dx = -1;
-  if (keys["d"]) dx = 1;
-  socket.emit("move", { dx, dy });
-}
-setInterval(sendInput, 1000 / 30);
-
-// 🎨 Draw players + trails + names
-function draw() {
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  drawBorders();
-  for (let id in trails) {
-    const color = players[id]?.color || "#999";
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i = 0; i < trails[id].length; i++) {
-      const p = trails[id][i];
-      if (i === 0) ctx.moveTo(p.x, p.y);
-      else ctx.lineTo(p.x, p.y);
+function animate() {
+  requestAnimationFrame(animate);
+  if (character && targetPosition) {
+    const dir = new THREE.Vector3().subVectors(targetPosition, character.position);
+    const dist = dir.length();
+    if (dist > 0.05) {
+      dir.normalize();
+      character.position.add(dir.multiplyScalar(0.05));
     }
-    ctx.stroke();
   }
-
-  for (let id in players) {
-    const p = players[id];
-    ctx. = p.color;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
-
-      ctx.fill();
-
-     // name tag
-    ctx.fillStyle = "#ccc";
-    ctx.font = "12px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(p.name || "?", p.x, p.y - 12);
-  }
-
-  requestAnimationFrame(draw);
+  renderer.render(scene, camera);
 }
-draw();
-
-
-const leaderboardList = document.getElementById("leaderboardList");
-
-socket.on("leaderboard", (topPlayers) => {
-  leaderboardList.innerHTML = "";
-  topPlayers.forEach((p, i) => {
-    const li = document.createElement("li");
-    li.textContent = `#${i + 1} ${p.name}: ${p.score}`;
-    leaderboardList.appendChild(li);
-  });
-});
+animate();

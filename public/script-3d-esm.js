@@ -2,6 +2,7 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.155.0/build/three.module.js";
 import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/controls/OrbitControls.js";
 import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/loaders/FBXLoader.js";
+import { SkeletonUtils } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/jsm/utils/SkeletonUtils.js";
 
 const fbxLoader = new FBXLoader();
 let baseModel = null;
@@ -238,13 +239,14 @@ function processSnapshot(snapshot) {
 
     if (p.id === socket.id) {
       if (!meModel && baseModel) {
-        meModel = baseModel.clone();
+        meModel = SkeletonUtils.clone(baseModel);
         meModel.traverse(child => {
           if (child.isMesh) {
             child.material = new THREE.MeshStandardMaterial({
               color: p.color || 0x66ccff,
               roughness: 0.6,
               metalness: 0.1,
+              skinning: true,
             });
           }
         });
@@ -265,13 +267,14 @@ function processSnapshot(snapshot) {
     } else {
       if (!otherMeshes.has(p.id) && baseModel) {
         const group = new THREE.Group();
-        const model = baseModel.clone();
+        const model = SkeletonUtils.clone(baseModel);
         model.traverse(child => {
           if (child.isMesh) {
             child.material = new THREE.MeshStandardMaterial({
               color: p.color || 0xffaa00,
               roughness: 0.6,
               metalness: 0.1,
+              skinning: true,
             });
           }
         });

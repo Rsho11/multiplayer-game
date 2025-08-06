@@ -5,8 +5,19 @@ import { FBXLoader } from "https://cdn.jsdelivr.net/npm/three@0.155.0/examples/j
 
 const fbxLoader = new FBXLoader();
 let baseModel = null;
-fbxLoader.load("/models/User.fbx", (fbx) => {
-  baseModel = fbx;
+let modelLoaded = false;
+let pendingSnapshot = null;
+const modelPromise = new Promise((resolve, reject) => {
+  fbxLoader.load(
+    "/models/User.fbx",
+    (fbx) => {
+      baseModel = fbx;
+      modelLoaded = true;
+      resolve(fbx);
+    },
+    undefined,
+    (err) => reject(err)
+  );
 });
 
 /* ------------------ Trail helper ------------------ */
@@ -219,10 +230,7 @@ function showChatBubble(id, text) {
 }
 
 /* ---------------- Network handlers ---------------- */
-socket.on("state3d", (snapshot) => {
-  waitDiv.style.display = "none";
-  updateLeaderboard(snapshot);
-
+function processSnapshot(snapshot) {
   const seen = new Set();
 
   snapshot.forEach((p) => {
@@ -291,7 +299,26 @@ socket.on("state3d", (snapshot) => {
       otherMeshes.delete(id);
     }
   }
+}
+
+socket.on("state3d", (snapshot) => {
+  waitDiv.style.display = "none";
+  updateLeaderboard(snapshot);
+
+  if (!modelLoaded) {
+    pendingSnapshot = snapshot;
+    return;
+  }
+
+  processSnapshot(snapshot);
 });
+
+modelPromise.then(() => {
+  if (pendingSnapshot) {
+    processSnapshot(pendingSnapshot);
+    pendingSnapshot = null;
+  }
+}).catch((err) => console.error("Failed to load model", err));
 
 /* ---------------- Render Loop ---------------- */
 function animate() {

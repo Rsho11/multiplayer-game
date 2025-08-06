@@ -7,6 +7,7 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 app.use(express.static("public"));
+app.use("/models", express.static("public/models"));
 
 let players = {};
 

@@ -9,12 +9,24 @@
     body { overflow: hidden; background: #0b0e16; }
     #debug { position: fixed; left: 8px; top: 8px; padding: 6px 8px; background: rgba(0,0,0,.4); color: #cbd5e1; font: 12px/1.4 system-ui, sans-serif; border-radius: 6px; }
   </style>
+
+  <!-- Map bare imports to CDN URLs -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+      "three/examples/jsm/loaders/FBXLoader.js": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="debug">Connecting…</div>
-  <!-- Socket.IO client (served by the server) -->
+
+  <!-- Socket.IO client -->
   <script src="/socket.io/socket.io.js"></script>
-  <!-- Main logic as an ES module -->
-  <script type="module" src="main.js"></script>
+
+  <!-- Your module script (cache-busted) -->
+  <script type="module" src="main.js?v=3"></script>
 </body>
 </html>

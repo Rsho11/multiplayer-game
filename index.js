@@ -5,6 +5,7 @@ const http = require("http").createServer(app);
 const io = require("socket.io")(http);
 
 app.use(express.static("public"));
+app.use('/models', express.static('models'));
 
 /* ---------- Arena + Physics ---------- */
 const ARENA = { w: 4048, h: 4048 };   // bigger map

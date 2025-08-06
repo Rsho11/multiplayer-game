@@ -9,8 +9,17 @@ const startBtn = document.getElementById('startBtn');
 const nameInput = document.getElementById('nameInput');
 const colorHexEl = document.getElementById('colorHex');
 const previewWrap = document.getElementById('previewWrap');
-const cameraOffset = new THREE.Vector3(0, 6, 10);
+
+const chatBar = document.getElementById('chatBar');
+const chatInput = document.getElementById('chatInput');
+const chatSend = document.getElementById('chatSend');
+
 const socket = window.io();
+
+// Prevent click-to-move when focusing chat
+function isTypingInChat(e) {
+  return e && (e.target === chatInput || (e.target && e.target.closest && e.target.closest('#chatBar')));
+}
 
 // ----------------- Main Game Scene -----------------
 const scene = new THREE.Scene();
@@ -44,7 +53,7 @@ const w2 = w1.clone(); w2.position.set(0, H/2,  L/2); scene.add(w2);
 const w3 = new THREE.Mesh(new THREE.BoxGeometry(T, H, L), wallMat); w3.position.set(-L/2, H/2, 0); scene.add(w3);
 const w4 = w3.clone(); w4.position.set( L/2, H/2, 0); scene.add(w4);
 
-// helpers
+// helpers & state
 const loader = new FBXLoader();
 const players = new Map(); // id -> Group
 let myId = null;
@@ -52,24 +61,13 @@ let targetPos = null;
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+const cameraOffset = new THREE.Vector3(0, 6, 10);
 
-// tint materials robustly
-// --- REPLACE your existing applyColor with this ---
-function applyColor(root, hex, { forceFlat = false } = {}) {
-  const c = new THREE.Color(hex);
+// ---- Chat bubbles state ----
+const activeBubbles = [];
 
-  root.traverse((obj) => {
-    if (!obj.isMesh || !obj.material) return;
-
-    if (Array.isArray(obj.material)) {
-      obj.material = obj.material.map((m) => tintOrReplaceMaterial(m, c, forceFlat));
-    } else {
-      obj.material = tintOrReplaceMaterial(obj.material, c, forceFlat);
-    }
-  });
-}
+// ---- Materials / tint helpers ----
 function tintOrReplaceMaterial(m, color, forceFlat) {
-  // Make a new flat material if requested or if the material doesn't expose .color
   if (forceFlat || !m || !('color' in m)) {
     const mat = new THREE.MeshStandardMaterial({
       color: color.clone(),
@@ -79,15 +77,27 @@ function tintOrReplaceMaterial(m, color, forceFlat) {
     mat.needsUpdate = true;
     return mat;
   }
-
-  // Otherwise, tint the existing material
-  if (m.map) m.map = null;                    // drop textures that fight tint
-  if (m.vertexColors) m.vertexColors = false; // ignore vertex colors
+  if (m.map) m.map = null;
+  if (m.vertexColors) m.vertexColors = false;
   if (m.color) m.color.copy(color);
   if (m.emissive) m.emissive.copy(color).multiplyScalar(0.12);
   m.needsUpdate = true;
   return m;
 }
+
+// robust tint across single/multi-material meshes
+function applyColor(root, hex, { forceFlat = false } = {}) {
+  const c = new THREE.Color(hex);
+  root.traverse((obj) => {
+    if (!obj.isMesh || !obj.material) return;
+    if (Array.isArray(obj.material)) {
+      obj.material = obj.material.map((m) => tintOrReplaceMaterial(m, c, forceFlat));
+    } else {
+      obj.material = tintOrReplaceMaterial(obj.material, c, forceFlat);
+    }
+  });
+}
+
 function makeNameTag(text) {
   const padX = 12, padY = 6;
   const ctx = document.createElement('canvas').getContext('2d');
@@ -96,7 +106,6 @@ function makeNameTag(text) {
   const h = 50 + padY * 2;
   ctx.canvas.width = w; ctx.canvas.height = h;
 
-  // rounded bubble
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(1,1,w-2,h-2,10); ctx.fill(); }
   else ctx.fillRect(1,1,w-2,h-2);
@@ -116,6 +125,67 @@ function makeNameTag(text) {
   return sprite;
 }
 
+// ---- Chat bubble creation & display ----
+function makeChatBubble(text) {
+  const ctx = document.createElement('canvas').getContext('2d');
+  const maxWidth = 260;
+  ctx.font = '600 28px system-ui, sans-serif';
+
+  // word wrap
+  const words = text.split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = w;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+
+  const padX = 18, padY = 12, lineH = 34;
+  const w = Math.ceil(Math.min(maxWidth, Math.max(...lines.map(l => ctx.measureText(l).width))) + padX * 2);
+  const h = Math.ceil(lines.length * lineH + padY * 2);
+
+  ctx.canvas.width = w;
+  ctx.canvas.height = h;
+
+  // light bubble (distinct from name tag)
+  ctx.fillStyle = '#e5eefc';
+  ctx.strokeStyle = 'rgba(51,65,85,0.45)';
+  ctx.lineWidth = 2;
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(1,1,w-2,h-2,12); ctx.fill(); ctx.stroke(); }
+  else { ctx.fillRect(1,1,w-2,h-2); ctx.strokeRect(1,1,w-2,h-2); }
+
+  ctx.fillStyle = '#0f172a';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '600 28px system-ui, sans-serif';
+  lines.forEach((l, i) => ctx.fillText(l, w/2, padY + lineH * i + lineH/2));
+
+  const tex = new THREE.CanvasTexture(ctx.canvas);
+  tex.anisotropy = 4;
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true, opacity: 1 });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(w/110, h/110, 1);
+  sprite.position.set(0, 2.6, 0); // above name tag
+  return sprite;
+}
+
+function showChatBubble(id, text) {
+  const root = players.get(id);
+  if (!root) return;
+  if (root.userData.chatBubble) root.remove(root.userData.chatBubble);
+  const bubble = makeChatBubble(text);
+  root.add(bubble);
+  root.userData.chatBubble = bubble;
+  activeBubbles.push({ sprite: bubble, root, ttl: 4.5 }); // seconds
+}
+
+// ---- Spawn & movement ----
 function spawnPlayer(id, pos, name, color, isLocal = false) {
   const root = new THREE.Group();
   root.position.set(pos.x, pos.y, pos.z);
@@ -132,7 +202,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
     fbx.position.y -= scaled.min.y;
     fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
 
-    if (color) applyColor(fbx, color, { forceFlat: true });
+    if (color) applyColor(fbx, color, { forceFlat: true }); // guarantee vivid player color
     root.add(fbx);
   }, undefined, () => {
     const g = new THREE.BoxGeometry(0.6, 1, 0.6);
@@ -143,10 +213,14 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
   if (name) root.add(makeNameTag(name));
 
   if (isLocal) {
-      const start = root.position.clone().add(cameraOffset);
-  camera.position.copy(start);
-  camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
+    // snap camera initially
+    const start = root.position.clone().add(cameraOffset);
+    camera.position.copy(start);
+    camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
+
+    // click-to-move (ignore clicks on chat)
     addEventListener('click', (e) => {
+      if (isTypingInChat(e)) return;
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
@@ -154,7 +228,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
       if (hit.length) { targetPos = hit[0].point.clone(); targetPos.y = 0; }
     });
   }
-}
+} // <-- important: close spawnPlayer
 
 function updateLocal(dt) {
   if (!myId || !targetPos) return;
@@ -176,17 +250,11 @@ function updateCamera(dt) {
   const me = players.get(myId);
   if (!me) return;
 
-  // where we want the camera to be
   const desired = me.position.clone().add(cameraOffset);
-
-  // dt-aware smoothing (stable across frame rates)
   const smooth = 1 - Math.pow(0.0001, dt);  // ≈0.12 at 60fps
   camera.position.lerp(desired, smooth);
-
-  // look slightly above the player’s center
   camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
 }
-
 
 // resize
 addEventListener('resize', () => {
@@ -201,7 +269,7 @@ let selectedColor = '#4ADE80';
 
 function initPreview() {
   pScene = new THREE.Scene();
-  pScene.background = null; // let CSS bg show through
+  pScene.background = null;
 
   pCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
   pCamera.position.set(0, 1.6, 4);
@@ -218,40 +286,34 @@ function initPreview() {
   pRoot = new THREE.Group();
   pScene.add(pRoot);
 
-// --- In initPreview(), REPLACE the FBX load callback with this ---
-// REPLACE your preview FBX loader block in initPreview():
-const fbxLoader = new FBXLoader();
-fbxLoader.load('/models/player.fbx', (fbx) => {
-  // Scale to ~1.7m tall
-  const box = new THREE.Box3().setFromObject(fbx);
-  const size = new THREE.Vector3(); box.getSize(size);
-  const s = 1.7 / Math.max(size.y || 0.001, 0.001);
-  fbx.scale.setScalar(s);
+  const fbxLoader = new FBXLoader();
+  fbxLoader.load('/models/player.fbx', (fbx) => {
+    const box = new THREE.Box3().setFromObject(fbx);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+    fbx.scale.setScalar(s);
 
-  // Ensure shadow flags and apply initial color (flat in preview)
-  fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-  pModel = fbx;
-  pRoot.add(pModel);
+    fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    pModel = fbx;
+    pRoot.add(pModel);
 
-  applyColor(pModel, selectedColor, { forceFlat: true });
-  framePreview(pRoot); // center & fit
-}, undefined, () => {
-  // Fallback cube
-  const g = new THREE.BoxGeometry(0.6, 1, 0.6);
-  const m = new THREE.MeshStandardMaterial({ color: selectedColor });
-  pModel = new THREE.Mesh(g, m);
-  pRoot.add(pModel);
-  framePreview(pRoot);
-});
+    applyColor(pModel, selectedColor, { forceFlat: true });
+    framePreview(pRoot);
+  }, undefined, () => {
+    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
+    const m = new THREE.MeshStandardMaterial({ color: selectedColor });
+    pModel = new THREE.Mesh(g, m);
+    pRoot.add(pModel);
+    framePreview(pRoot);
+  });
 
-
-  // events
+  // rotate by dragging
   const onDown = (e) => { isDragging = true; lastX = e.clientX || e.touches?.[0]?.clientX || 0; };
   const onMove = (e) => {
     if (!isDragging) return;
     const x = e.clientX || e.touches?.[0]?.clientX || 0;
     const dx = x - lastX; lastX = x;
-    pRoot.rotation.y -= dx * 0.01; // rotate left/right
+    pRoot.rotation.y -= dx * 0.01;
   };
   const onUp = () => { isDragging = false; };
 
@@ -262,7 +324,6 @@ fbxLoader.load('/models/player.fbx', (fbx) => {
   previewWrap.addEventListener('touchmove', onMove, {passive:true});
   addEventListener('touchend', onUp);
 
-  // size
   const resizePreview = () => {
     const r = previewWrap.getBoundingClientRect();
     const w = Math.max(240, Math.floor(r.width));
@@ -273,7 +334,6 @@ fbxLoader.load('/models/player.fbx', (fbx) => {
   resizePreview();
   new ResizeObserver(resizePreview).observe(previewWrap);
 
-  // loop
   const loop = () => {
     if (!pRenderer) return;
     pRenderer.render(pScene, pCamera);
@@ -281,30 +341,24 @@ fbxLoader.load('/models/player.fbx', (fbx) => {
   };
   loop();
 }
-// --- add near preview code ---
+
 function framePreview(obj) {
   if (!pCamera) return;
-
-  // Compute bounds of the object
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
   const center = new THREE.Vector3(); box.getCenter(center);
 
-  // Center the model so its middle is at origin (no cropping)
-  obj.position.sub(center); // move the WHOLE object so center is (0,0,0)
+  obj.position.sub(center); // center whole object at origin
 
-  // Compute distance to fit in view
   const fov = THREE.MathUtils.degToRad(pCamera.fov);
   const fitHeightDist = (size.y * 0.6) / Math.tan(fov * 0.5);
   const fitWidthDist  = (size.x * 0.6) / Math.tan(fov * 0.5) / pCamera.aspect;
   const dist = Math.max(fitHeightDist, fitWidthDist) * 1.25;
 
-  // Slightly below mid-height so you see feet and head comfortably
   const yOffset = size.y * 0.12;
   pCamera.position.set(0, yOffset, dist);
   pCamera.lookAt(0, yOffset, 0);
 }
-
 
 function disposePreview() {
   if (!pRenderer) return;
@@ -313,10 +367,9 @@ function disposePreview() {
   pRenderer = null; pScene = null; pCamera = null; pRoot = null; pModel = null;
 }
 
-// --- REPLACE updatePreviewColor with this ---
 function updatePreviewColor(hex) {
   selectedColor = hex;
-  if (pModel) applyColor(pModel, hex, { forceFlat: true }); // preview = guaranteed vivid tint
+  if (pModel) applyColor(pModel, hex, { forceFlat: true });
 }
 
 // ----------------- UI: Color Wheel + Name -----------------
@@ -338,25 +391,36 @@ function buildWheel() {
       colorHexEl.textContent = hex.toUpperCase();
       Array.from(wheel.children).forEach(c => c.classList.remove('selected'));
       b.classList.add('selected');
-      updatePreviewColor(hex);     // live-update preview tint
+      updatePreviewColor(hex);
       validateForm();
     };
     wheel.appendChild(b);
   });
   colorHexEl.textContent = palette[selectedIdx].toUpperCase();
 }
+
 function validateForm() {
   startBtn.disabled = nameInput.value.trim().length === 0;
 }
+
 nameInput.addEventListener('input', validateForm);
 buildWheel();
+
+// ----------------- Chat send -----------------
+function sendChat() {
+  const text = (chatInput.value || '').trim();
+  if (!text) return;
+  socket.emit('chat', text);
+  chatInput.value = '';
+}
+chatSend.addEventListener('click', sendChat);
+chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
 
 // ----------------- Socket flow -----------------
 socket.on('connect', () => {
   debug.textContent = 'Connected ✔';
   overlay.classList.remove('hidden');   // show setup UI
-  initPreview();                         // start preview
-  // ensure wheel selection applies initial color to preview
+  initPreview();
   updatePreviewColor(palette[selectedIdx]);
 });
 
@@ -364,8 +428,12 @@ startBtn.onclick = () => {
   const name = nameInput.value.trim();
   if (!name) return;
   overlay.classList.add('hidden');
-  disposePreview();                      // free preview context
+  disposePreview();
   socket.emit('register', { name, color: selectedColor });
+
+  // show chat bar
+  chatBar.classList.remove('hidden');
+  setTimeout(() => chatInput.focus(), 50);
 };
 
 socket.on('currentPlayers', ({ players: list, you }) => {
@@ -378,11 +446,32 @@ socket.on('newPlayer', (p) => { spawnPlayer(p.id, p, p.name, p.color, false); })
 socket.on('playerMoved', (p) => { const obj = players.get(p.id); if (obj) obj.position.set(p.x, p.y, p.z); });
 socket.on('removePlayer', (id) => { const obj = players.get(id); if (obj) { scene.remove(obj); players.delete(id); } });
 
+// NEW: receive chat messages -> show bubbles
+socket.on('chat', ({ id, text }) => {
+  showChatBubble(id, text);
+});
+
 // ----------------- Main loop -----------------
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
-  updateLocal(dt); updateCamera(dt);
+
+  updateLocal(dt);
+  updateCamera(dt);
+
+  // fade chat bubbles
+  for (let i = activeBubbles.length - 1; i >= 0; i--) {
+    const b = activeBubbles[i];
+    b.ttl -= dt;
+    if (b.ttl <= 0 && b.sprite && b.sprite.material) {
+      b.sprite.material.opacity = Math.max(0, (b.ttl + 0.5) / 0.5); // fade last 0.5s
+    }
+    if (b.ttl <= -0.5) {
+      if (b.root) b.root.remove(b.sprite);
+      activeBubbles.splice(i, 1);
+    }
+  }
+
   renderer.render(scene, camera);
   requestAnimationFrame(loop);
 }

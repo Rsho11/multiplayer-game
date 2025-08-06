@@ -1,6 +1,9 @@
+import * as THREE from 'https://unpkg.com/three@0.159.0/build/three.module.js';
+import { FBXLoader } from 'https://unpkg.com/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
+
 const socket = io();
 
-// Scene
+// Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -14,7 +17,7 @@ scene.add(light);
 camera.position.set(0, 3, 8);
 
 let players = {};
-const loader = new THREE.FBXLoader();
+const loader = new FBXLoader();
 
 function loadPlayerModel(id, position, isLocal) {
     loader.load("/models/player.fbx", (object) => {
@@ -40,7 +43,6 @@ function loadPlayerModel(id, position, isLocal) {
     });
 }
 
-// Socket events
 socket.on("currentPlayers", (data) => {
     for (let id in data) {
         loadPlayerModel(id, data[id], id === socket.id);

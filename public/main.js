@@ -76,7 +76,7 @@ function spawnPlayer(id, pos, isLocal=false) {
 
   loader.load('/models/player.fbx',
     (fbx) => {
-      fbx.scale.setScalar(0.01);
+      fbx.scale.setScalar(1);
       fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
       objectRoot.add(fbx);
     },

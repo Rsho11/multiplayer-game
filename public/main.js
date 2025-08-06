@@ -63,32 +63,33 @@ function applyColor(root, hex, { forceFlat = false } = {}) {
   root.traverse((obj) => {
     if (!obj.isMesh || !obj.material) return;
 
-    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-
-    for (let i = 0; i < mats.length; i++) {
-      let m = mats[i];
-
-      if (forceFlat) {
-        // In the preview we want a guaranteed, vivid tint:
-        m = mats[i] = new THREE.MeshStandardMaterial({
-          color: c.clone(),
-          metalness: 0.1,
-          roughness: 0.8
-        });
-      } else {
-        // In-game, try to tint existing materials:
-        if (m.color) m.color.copy(c);
-        if (m.emissive) m.emissive.copy(c).multiplyScalar(0.12);
-        if ('vertexColors' in m && m.vertexColors) m.vertexColors = false;
-        if (m.map) m.map = null; // drop texture if it fights the tint
-      }
-
-      m.needsUpdate = true;
+    if (Array.isArray(obj.material)) {
+      obj.material = obj.material.map((m) => tintOrReplaceMaterial(m, c, forceFlat));
+    } else {
+      obj.material = tintOrReplaceMaterial(obj.material, c, forceFlat);
     }
   });
 }
+function tintOrReplaceMaterial(m, color, forceFlat) {
+  // Make a new flat material if requested or if the material doesn't expose .color
+  if (forceFlat || !m || !('color' in m)) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: color.clone(),
+      metalness: 0.05,
+      roughness: 0.85
+    });
+    mat.needsUpdate = true;
+    return mat;
+  }
 
-
+  // Otherwise, tint the existing material
+  if (m.map) m.map = null;                    // drop textures that fight tint
+  if (m.vertexColors) m.vertexColors = false; // ignore vertex colors
+  if (m.color) m.color.copy(color);
+  if (m.emissive) m.emissive.copy(color).multiplyScalar(0.12);
+  m.needsUpdate = true;
+  return m;
+}
 function makeNameTag(text) {
   const padX = 12, padY = 6;
   const ctx = document.createElement('canvas').getContext('2d');
@@ -133,7 +134,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
     fbx.position.y -= scaled.min.y;
     fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
 
-    if (color) applyColor(fbx, color);
+    if (color) applyColor(fbx, color, { forceFlat: true });
     root.add(fbx);
   }, undefined, () => {
     const g = new THREE.BoxGeometry(0.6, 1, 0.6);
@@ -195,6 +196,7 @@ function initPreview() {
   pCamera.position.set(0, 1.6, 4);
 
   pRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  pRenderer.outputColorSpace = THREE.SRGBColorSpace;
   pRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   previewWrap.appendChild(pRenderer.domElement);
 
@@ -206,23 +208,22 @@ function initPreview() {
   pScene.add(pRoot);
 
 // --- In initPreview(), REPLACE the FBX load callback with this ---
+// REPLACE your preview FBX loader block in initPreview():
 const fbxLoader = new FBXLoader();
 fbxLoader.load('/models/player.fbx', (fbx) => {
-  // autoscale ~1.7m tall and lift to y=0
+  // Scale to ~1.7m tall
   const box = new THREE.Box3().setFromObject(fbx);
   const size = new THREE.Vector3(); box.getSize(size);
   const s = 1.7 / Math.max(size.y || 0.001, 0.001);
   fbx.scale.setScalar(s);
 
-  // ensure meshes cast/receive, then tint (force flat in preview)
+  // Ensure shadow flags and apply initial color (flat in preview)
   fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-  applyColor(fbx, selectedColor, { forceFlat: true });
-
   pModel = fbx;
   pRoot.add(pModel);
 
-  // Center and frame the model in the preview
-  framePreview(pRoot);
+  applyColor(pModel, selectedColor, { forceFlat: true });
+  framePreview(pRoot); // center & fit
 }, undefined, () => {
   // Fallback cube
   const g = new THREE.BoxGeometry(0.6, 1, 0.6);
@@ -269,26 +270,28 @@ fbxLoader.load('/models/player.fbx', (fbx) => {
   };
   loop();
 }
-// --- ADD this helper (near the preview code) ---
+// --- add near preview code ---
 function framePreview(obj) {
   if (!pCamera) return;
 
+  // Compute bounds of the object
   const box = new THREE.Box3().setFromObject(obj);
   const size = new THREE.Vector3(); box.getSize(size);
   const center = new THREE.Vector3(); box.getCenter(center);
 
-  // Move the root so the model is centered around origin (0,0,0)
-  pRoot.position.y -= center.y;
+  // Center the model so its middle is at origin (no cropping)
+  obj.position.sub(center); // move the WHOLE object so center is (0,0,0)
 
-  // Compute a distance that fits the model in the camera frustum
+  // Compute distance to fit in view
   const fov = THREE.MathUtils.degToRad(pCamera.fov);
-  const fitHeightDist = (size.y * 0.6) / Math.tan(fov * 0.5);   // 0.6 for a little margin
+  const fitHeightDist = (size.y * 0.6) / Math.tan(fov * 0.5);
   const fitWidthDist  = (size.x * 0.6) / Math.tan(fov * 0.5) / pCamera.aspect;
-  const dist = Math.max(fitHeightDist, fitWidthDist) * 1.2;
+  const dist = Math.max(fitHeightDist, fitWidthDist) * 1.25;
 
-  // Place camera slightly above center, looking at the origin
-  pCamera.position.set(0, size.y * 0.15, dist);
-  pCamera.lookAt(0, 0.5, 0);
+  // Slightly below mid-height so you see feet and head comfortably
+  const yOffset = size.y * 0.12;
+  pCamera.position.set(0, yOffset, dist);
+  pCamera.lookAt(0, yOffset, 0);
 }
 
 
@@ -302,10 +305,8 @@ function disposePreview() {
 // --- REPLACE updatePreviewColor with this ---
 function updatePreviewColor(hex) {
   selectedColor = hex;
-  // Repaint the preview immediately (force flat for guaranteed result)
-  if (pRoot) applyColor(pRoot, hex, { forceFlat: true });
+  if (pModel) applyColor(pModel, hex, { forceFlat: true }); // preview = guaranteed vivid tint
 }
-
 
 // ----------------- UI: Color Wheel + Name -----------------
 const palette = ['#4ADE80','#60A5FA','#F472B6','#FBBF24','#34D399','#A78BFA','#F87171','#F59E0B'];

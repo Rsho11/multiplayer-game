@@ -9,28 +9,30 @@ const io = new Server(server);
 app.use(express.static("public"));
 app.use("/models", express.static("public/models"));
 
-let players = {};
+// In-memory player state
+const players = {};
 
 io.on("connection", (socket) => {
-    console.log(`Player connected: ${socket.id}`);
-    players[socket.id] = { x: 0, y: 0, z: 0 };
+  console.log("Player connected:", socket.id);
+  // spawn at origin
+  players[socket.id] = { x: 0, y: 0, z: 0 };
 
-    socket.emit("currentPlayers", players);
-    socket.broadcast.emit("newPlayer", { id: socket.id, ...players[socket.id] });
+  socket.emit("currentPlayers", { players, you: socket.id });
+  socket.broadcast.emit("newPlayer", { id: socket.id, ...players[socket.id] });
 
-    socket.on("move", (pos) => {
-        players[socket.id] = pos;
-        socket.broadcast.emit("playerMoved", { id: socket.id, ...pos });
-    });
+  socket.on("move", (pos) => {
+    players[socket.id] = pos;
+    socket.broadcast.emit("playerMoved", { id: socket.id, ...pos });
+  });
 
-    socket.on("disconnect", () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        delete players[socket.id];
-        io.emit("removePlayer", socket.id);
-    });
+  socket.on("disconnect", () => {
+    console.log("Player disconnected:", socket.id);
+    delete players[socket.id];
+    io.emit("removePlayer", socket.id);
+  });
 });
 
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on http://localhost:${PORT}`);
 });

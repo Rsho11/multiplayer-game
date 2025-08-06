@@ -8,9 +8,10 @@
     </style>
 </head>
 <body>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/loaders/FBXLoader.js"></script>
+    <!-- Load socket.io first so main.js can use it -->
     <script src="/socket.io/socket.io.js"></script>
-    <script src="main.js"></script>
+
+    <!-- Load our main script as a JavaScript module -->
+    <script type="module" src="main.js"></script>
 </body>
 </html>

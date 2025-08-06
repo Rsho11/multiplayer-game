@@ -56,19 +56,38 @@ const mouse = new THREE.Vector2();
 const cameraOffset = new THREE.Vector3(0, 6, 10);
 
 // tint materials robustly
-function applyColor(root, hex) {
+// --- REPLACE your existing applyColor with this ---
+function applyColor(root, hex, { forceFlat = false } = {}) {
   const c = new THREE.Color(hex);
+
   root.traverse((obj) => {
     if (!obj.isMesh || !obj.material) return;
+
     const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-    for (const m of mats) {
-      if (m.color) m.color.set(c);
-      if (m.emissive) m.emissive.set(c).multiplyScalar(0.12);
-      if ('vertexColors' in m && m.vertexColors) m.vertexColors = false;
+
+    for (let i = 0; i < mats.length; i++) {
+      let m = mats[i];
+
+      if (forceFlat) {
+        // In the preview we want a guaranteed, vivid tint:
+        m = mats[i] = new THREE.MeshStandardMaterial({
+          color: c.clone(),
+          metalness: 0.1,
+          roughness: 0.8
+        });
+      } else {
+        // In-game, try to tint existing materials:
+        if (m.color) m.color.copy(c);
+        if (m.emissive) m.emissive.copy(c).multiplyScalar(0.12);
+        if ('vertexColors' in m && m.vertexColors) m.vertexColors = false;
+        if (m.map) m.map = null; // drop texture if it fights the tint
+      }
+
       m.needsUpdate = true;
     }
   });
 }
+
 
 function makeNameTag(text) {
   const padX = 12, padY = 6;
@@ -186,25 +205,33 @@ function initPreview() {
   pRoot = new THREE.Group();
   pScene.add(pRoot);
 
-  // load the same FBX
-  const fbxLoader = new FBXLoader();
-  fbxLoader.load('/models/player.fbx', (fbx) => {
-    // autoscale to ~1.7m and lift to y=0
-    const box = new THREE.Box3().setFromObject(fbx);
-    const size = new THREE.Vector3(); box.getSize(size);
-    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
-    fbx.scale.setScalar(s);
-    const scaled = new THREE.Box3().setFromObject(fbx);
-    fbx.position.y -= scaled.min.y;
-    if (selectedColor) applyColor(fbx, selectedColor);
-    pModel = fbx;
-    pRoot.add(pModel);
-  }, undefined, () => {
-    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
-    const m = new THREE.MeshStandardMaterial({ color: selectedColor });
-    pModel = new THREE.Mesh(g, m);
-    pRoot.add(pModel);
-  });
+// --- In initPreview(), REPLACE the FBX load callback with this ---
+const fbxLoader = new FBXLoader();
+fbxLoader.load('/models/player.fbx', (fbx) => {
+  // autoscale ~1.7m tall and lift to y=0
+  const box = new THREE.Box3().setFromObject(fbx);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+  fbx.scale.setScalar(s);
+
+  // ensure meshes cast/receive, then tint (force flat in preview)
+  fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+  applyColor(fbx, selectedColor, { forceFlat: true });
+
+  pModel = fbx;
+  pRoot.add(pModel);
+
+  // Center and frame the model in the preview
+  framePreview(pRoot);
+}, undefined, () => {
+  // Fallback cube
+  const g = new THREE.BoxGeometry(0.6, 1, 0.6);
+  const m = new THREE.MeshStandardMaterial({ color: selectedColor });
+  pModel = new THREE.Mesh(g, m);
+  pRoot.add(pModel);
+  framePreview(pRoot);
+});
+
 
   // events
   const onDown = (e) => { isDragging = true; lastX = e.clientX || e.touches?.[0]?.clientX || 0; };
@@ -242,6 +269,28 @@ function initPreview() {
   };
   loop();
 }
+// --- ADD this helper (near the preview code) ---
+function framePreview(obj) {
+  if (!pCamera) return;
+
+  const box = new THREE.Box3().setFromObject(obj);
+  const size = new THREE.Vector3(); box.getSize(size);
+  const center = new THREE.Vector3(); box.getCenter(center);
+
+  // Move the root so the model is centered around origin (0,0,0)
+  pRoot.position.y -= center.y;
+
+  // Compute a distance that fits the model in the camera frustum
+  const fov = THREE.MathUtils.degToRad(pCamera.fov);
+  const fitHeightDist = (size.y * 0.6) / Math.tan(fov * 0.5);   // 0.6 for a little margin
+  const fitWidthDist  = (size.x * 0.6) / Math.tan(fov * 0.5) / pCamera.aspect;
+  const dist = Math.max(fitHeightDist, fitWidthDist) * 1.2;
+
+  // Place camera slightly above center, looking at the origin
+  pCamera.position.set(0, size.y * 0.15, dist);
+  pCamera.lookAt(0, 0.5, 0);
+}
+
 
 function disposePreview() {
   if (!pRenderer) return;
@@ -250,10 +299,13 @@ function disposePreview() {
   pRenderer = null; pScene = null; pCamera = null; pRoot = null; pModel = null;
 }
 
+// --- REPLACE updatePreviewColor with this ---
 function updatePreviewColor(hex) {
   selectedColor = hex;
-  if (pRoot) applyColor(pRoot, hex);
+  // Repaint the preview immediately (force flat for guaranteed result)
+  if (pRoot) applyColor(pRoot, hex, { forceFlat: true });
 }
+
 
 // ----------------- UI: Color Wheel + Name -----------------
 const palette = ['#4ADE80','#60A5FA','#F472B6','#FBBF24','#34D399','#A78BFA','#F87171','#F59E0B'];

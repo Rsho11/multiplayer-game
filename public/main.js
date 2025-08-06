@@ -1,4 +1,4 @@
-// ES-module imports from CDN (avoids "module specifier 'three'" errors)
+// ES-module imports from CDN (no bundler)
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
 
@@ -8,9 +8,11 @@ const wheel = document.getElementById('wheel');
 const startBtn = document.getElementById('startBtn');
 const nameInput = document.getElementById('nameInput');
 const colorHexEl = document.getElementById('colorHex');
+const previewWrap = document.getElementById('previewWrap');
+
 const socket = window.io();
 
-// ---------- Scene ----------
+// ----------------- Main Game Scene -----------------
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0e16);
 
@@ -19,19 +21,19 @@ camera.position.set(0, 6, 12);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.shadowMap.enabled = true;
-// r150+ color space
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
-// Lights
+// lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
 hemi.position.set(0, 20, 0); scene.add(hemi);
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
 dir.position.set(5, 10, 7); dir.castShadow = true; scene.add(dir);
 
-// Room
+// room
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30),
   new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'floor'; scene.add(floor);
@@ -42,7 +44,7 @@ const w2 = w1.clone(); w2.position.set(0, H/2,  L/2); scene.add(w2);
 const w3 = new THREE.Mesh(new THREE.BoxGeometry(T, H, L), wallMat); w3.position.set(-L/2, H/2, 0); scene.add(w3);
 const w4 = w3.clone(); w4.position.set( L/2, H/2, 0); scene.add(w4);
 
-// ---------- Helpers ----------
+// helpers
 const loader = new FBXLoader();
 const players = new Map(); // id -> Group
 let myId = null;
@@ -53,7 +55,7 @@ const mouse = new THREE.Vector2();
 
 const cameraOffset = new THREE.Vector3(0, 6, 10);
 
-// Better tint: handles arrays, emissive, vertexColors
+// tint materials robustly
 function applyColor(root, hex) {
   const c = new THREE.Color(hex);
   root.traverse((obj) => {
@@ -76,18 +78,10 @@ function makeNameTag(text) {
   const h = 50 + padY * 2;
   ctx.canvas.width = w; ctx.canvas.height = h;
 
-  if (ctx.roundRect) {
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.roundRect(1, 1, w-2, h-2, 10);
-    ctx.fill(); ctx.stroke();
-  } else {
-    // Fallback rectangle
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(1,1,w-2,h-2);
-  }
+  // rounded bubble
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(1,1,w-2,h-2,10); ctx.fill(); }
+  else ctx.fillRect(1,1,w-2,h-2);
 
   ctx.fillStyle = '#e2e8f0';
   ctx.textBaseline = 'middle';
@@ -110,7 +104,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
   scene.add(root);
   players.set(id, root);
 
-  // Load FBX (autoscale to ~1.7m, place feet on floor, tint)
+  // FBX
   loader.load('/models/player.fbx', (fbx) => {
     const box = new THREE.Box3().setFromObject(fbx);
     const size = new THREE.Vector3(); box.getSize(size);
@@ -123,7 +117,6 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
     if (color) applyColor(fbx, color);
     root.add(fbx);
   }, undefined, () => {
-    // Fallback cube if FBX fails
     const g = new THREE.BoxGeometry(0.6, 1, 0.6);
     const m = new THREE.MeshStandardMaterial({ color: color || '#4ADE80' });
     const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; root.add(mesh);
@@ -137,9 +130,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
       const hit = raycaster.intersectObjects([floor], false);
-      if (hit.length) {
-        targetPos = hit[0].point.clone(); targetPos.y = 0;
-      }
+      if (hit.length) { targetPos = hit[0].point.clone(); targetPos.y = 0; }
     });
   }
 }
@@ -152,9 +143,8 @@ function updateLocal(dt) {
   const d = dir.length();
   if (d > 0.02) {
     dir.normalize();
-    me.position.addScaledVector(dir, 3.0 * dt); // speed
-    const yaw = Math.atan2(dir.x, dir.z);
-    me.rotation.y = yaw;
+    me.position.addScaledVector(dir, 3.0 * dt);
+    me.rotation.y = Math.atan2(dir.x, dir.z);
     socket.emit('move', { x: me.position.x, y: me.position.y, z: me.position.z });
   }
 }
@@ -163,40 +153,133 @@ function updateCamera(dt) {
   if (!myId) return;
   const me = players.get(myId); if (!me) return;
   const desired = me.position.clone().add(cameraOffset);
-  camera.position.lerp(desired, 0.12); // smoothing
+  camera.position.lerp(desired, 0.12);
   camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
 }
 
-// Resize
+// resize
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
 });
 
-// ---------- Overlay (radial color + name) ----------
+// ----------------- Character Creation: Preview Scene -----------------
+let pScene, pCamera, pRenderer, pRoot, pModel;
+let isDragging = false, lastX = 0;
+let selectedColor = '#4ADE80';
+
+function initPreview() {
+  pScene = new THREE.Scene();
+  pScene.background = null; // let CSS bg show through
+
+  pCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
+  pCamera.position.set(0, 1.6, 4);
+
+  pRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  pRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  previewWrap.appendChild(pRenderer.domElement);
+
+  const amb = new THREE.AmbientLight(0xffffff, 0.35); pScene.add(amb);
+  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(3, 4, 5); pScene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.6); rim.position.set(-3, 3, -3); pScene.add(rim);
+
+  pRoot = new THREE.Group();
+  pScene.add(pRoot);
+
+  // load the same FBX
+  const fbxLoader = new FBXLoader();
+  fbxLoader.load('/models/player.fbx', (fbx) => {
+    // autoscale to ~1.7m and lift to y=0
+    const box = new THREE.Box3().setFromObject(fbx);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+    fbx.scale.setScalar(s);
+    const scaled = new THREE.Box3().setFromObject(fbx);
+    fbx.position.y -= scaled.min.y;
+    if (selectedColor) applyColor(fbx, selectedColor);
+    pModel = fbx;
+    pRoot.add(pModel);
+  }, undefined, () => {
+    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
+    const m = new THREE.MeshStandardMaterial({ color: selectedColor });
+    pModel = new THREE.Mesh(g, m);
+    pRoot.add(pModel);
+  });
+
+  // events
+  const onDown = (e) => { isDragging = true; lastX = e.clientX || e.touches?.[0]?.clientX || 0; };
+  const onMove = (e) => {
+    if (!isDragging) return;
+    const x = e.clientX || e.touches?.[0]?.clientX || 0;
+    const dx = x - lastX; lastX = x;
+    pRoot.rotation.y -= dx * 0.01; // rotate left/right
+  };
+  const onUp = () => { isDragging = false; };
+
+  previewWrap.addEventListener('mousedown', onDown);
+  previewWrap.addEventListener('mousemove', onMove);
+  addEventListener('mouseup', onUp);
+  previewWrap.addEventListener('touchstart', onDown, {passive:true});
+  previewWrap.addEventListener('touchmove', onMove, {passive:true});
+  addEventListener('touchend', onUp);
+
+  // size
+  const resizePreview = () => {
+    const r = previewWrap.getBoundingClientRect();
+    const w = Math.max(240, Math.floor(r.width));
+    const h = Math.max(220, Math.floor(r.height));
+    pCamera.aspect = w / h; pCamera.updateProjectionMatrix();
+    pRenderer.setSize(w, h, false);
+  };
+  resizePreview();
+  new ResizeObserver(resizePreview).observe(previewWrap);
+
+  // loop
+  const loop = () => {
+    if (!pRenderer) return;
+    pRenderer.render(pScene, pCamera);
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+
+function disposePreview() {
+  if (!pRenderer) return;
+  pRenderer.dispose();
+  previewWrap.innerHTML = '<div id="previewHint">Drag to rotate</div>';
+  pRenderer = null; pScene = null; pCamera = null; pRoot = null; pModel = null;
+}
+
+function updatePreviewColor(hex) {
+  selectedColor = hex;
+  if (pRoot) applyColor(pRoot, hex);
+}
+
+// ----------------- UI: Color Wheel + Name -----------------
 const palette = ['#4ADE80','#60A5FA','#F472B6','#FBBF24','#34D399','#A78BFA','#F87171','#F59E0B'];
 let selectedIdx = 0;
-let selectedColor = palette[selectedIdx];
 
 function buildWheel() {
-  const r = 92;
+  const r = 100;
   palette.forEach((hex, i) => {
     const angle = (i / palette.length) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(angle) * r + 110;
-    const y = Math.sin(angle) * r + 110;
+    const x = Math.cos(angle) * r + 120;
+    const y = Math.sin(angle) * r + 120;
     const b = document.createElement('button');
     b.className = 'swatch' + (i===selectedIdx ? ' selected' : '');
     b.style.left = x + 'px'; b.style.top = y + 'px';
     b.style.background = hex; b.title = hex;
     b.onclick = () => {
-      selectedIdx = i; selectedColor = hex; colorHexEl.textContent = hex.toUpperCase();
+      selectedIdx = i;
+      colorHexEl.textContent = hex.toUpperCase();
       Array.from(wheel.children).forEach(c => c.classList.remove('selected'));
       b.classList.add('selected');
+      updatePreviewColor(hex);     // live-update preview tint
       validateForm();
     };
     wheel.appendChild(b);
   });
-  colorHexEl.textContent = selectedColor.toUpperCase();
+  colorHexEl.textContent = palette[selectedIdx].toUpperCase();
 }
 function validateForm() {
   startBtn.disabled = nameInput.value.trim().length === 0;
@@ -204,16 +287,20 @@ function validateForm() {
 nameInput.addEventListener('input', validateForm);
 buildWheel();
 
-// ---------- Socket flow ----------
+// ----------------- Socket flow -----------------
 socket.on('connect', () => {
   debug.textContent = 'Connected ✔';
-  overlay.classList.remove('hidden'); // show the setup UI after connected
+  overlay.classList.remove('hidden');   // show setup UI
+  initPreview();                         // start preview
+  // ensure wheel selection applies initial color to preview
+  updatePreviewColor(palette[selectedIdx]);
 });
 
 startBtn.onclick = () => {
   const name = nameInput.value.trim();
   if (!name) return;
   overlay.classList.add('hidden');
+  disposePreview();                      // free preview context
   socket.emit('register', { name, color: selectedColor });
 };
 
@@ -224,16 +311,10 @@ socket.on('currentPlayers', ({ players: list, you }) => {
   });
 });
 socket.on('newPlayer', (p) => { spawnPlayer(p.id, p, p.name, p.color, false); });
-socket.on('playerMoved', (p) => {
-  const obj = players.get(p.id);
-  if (obj) obj.position.set(p.x, p.y, p.z);
-});
-socket.on('removePlayer', (id) => {
-  const obj = players.get(id);
-  if (obj) { scene.remove(obj); players.delete(id); }
-});
+socket.on('playerMoved', (p) => { const obj = players.get(p.id); if (obj) obj.position.set(p.x, p.y, p.z); });
+socket.on('removePlayer', (id) => { const obj = players.get(id); if (obj) { scene.remove(obj); players.delete(id); } });
 
-// ---------- Loop ----------
+// ----------------- Main loop -----------------
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;

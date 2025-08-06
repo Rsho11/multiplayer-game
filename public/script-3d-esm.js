@@ -79,11 +79,25 @@ const socket = io();
 console.log("[client] script-3d-esm.js loaded");
 
 let myName = "";
+let myColor = "#ffffff";
+
+const stored = JSON.parse(localStorage.getItem("playerInfo") || "null");
+if (stored && Date.now() - stored.created < 30 * 24 * 60 * 60 * 1000) {
+  myName = stored.name;
+  myColor = stored.color;
+  document.getElementById("nameModal").style.display = "none";
+  socket.emit("join", { name: myName, color: myColor });
+} else {
+  const rand = "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
+  document.getElementById("colorInput").value = rand;
+}
+
 document.getElementById("startGame").onclick = () => {
   myName = document.getElementById("nameInput").value.trim();
+  myColor = document.getElementById("colorInput").value;
   if (!myName) return alert("Please enter your name!");
   document.getElementById("nameModal").style.display = "none";
-  const myColor = "#" + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, "0");
+  localStorage.setItem("playerInfo", JSON.stringify({ name: myName, color: myColor, created: Date.now() }));
   socket.emit("join", { name: myName, color: myColor });
 };
 
@@ -97,11 +111,12 @@ chatForm.addEventListener("submit", (e) => {
   if (msg) socket.emit("chat", msg);
   chatInput.value = "";
 });
-socket.on("chat", ({ name, text }) => {
+socket.on("chat", ({ id, name, text }) => {
   const div = document.createElement("div");
   div.innerHTML = `<strong>${name}:</strong> ${text}`;
   messages.appendChild(div);
   messages.scrollTop = messages.scrollHeight;
+  showChatBubble(id, text);
 });
 
 // Leaderboard
@@ -182,6 +197,26 @@ let meModel = null;
 const otherMeshes = new Map();
 const meTrail = new Trail(scene, 0xeeeeee, 150, 0.35, 0.25);
 const otherTrails = new Map();
+const chatBubbles = new Map();
+
+function showChatBubble(id, text) {
+  const target = id === socket.id ? meGroup : otherMeshes.get(id)?.group;
+  if (!target) return;
+  const existing = chatBubbles.get(id);
+  if (existing) {
+    target.remove(existing.sprite);
+    clearTimeout(existing.timeout);
+  }
+  const { sprite, width, height } = makeLabelCanvas(text);
+  sprite.scale.set(width * 0.015, height * 0.015, 1);
+  sprite.position.set(0, 18, 0);
+  target.add(sprite);
+  const timeout = setTimeout(() => {
+    target.remove(sprite);
+    chatBubbles.delete(id);
+  }, 3000);
+  chatBubbles.set(id, { sprite, timeout });
+}
 
 /* ---------------- Network handlers ---------------- */
 socket.on("state3d", (snapshot) => {

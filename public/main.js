@@ -456,7 +456,6 @@ function showCharCreator(idToken = null) {
     overlay.querySelector('.subtitle').after(infoRow);
   }
 
-  startBtn.onclick = () => {
   // — register only after the player clicks “Start” —
   startBtn.onclick = () => {
     const displayName = nameInput.value.trim() || 'Player';
@@ -483,7 +482,6 @@ function showCharCreator(idToken = null) {
       });
     }
   };
-}
 
 function addLogout() {
   const btn = document.createElement('button');

@@ -69,10 +69,35 @@
     #chatSend {
       background:#334155; color:#e2e8f0; border:0; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer;
     }
+    .gate      { position:fixed; inset:0; display:flex; flex-direction:column;
+             justify-content:center; align-items:center; background:#0b0e16;
+             color:#e2e8f0; z-index:15; }
+.gate .tagline { color:#94a3b8; margin-top:4px; margin-bottom:22px; }
+.btnRow    { display:flex; gap:18px; }
+button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
+               padding:12px 26px; border-radius:14px; font-size:17px; cursor:pointer; }
+#gSignIn   > div { /* Google button gets injected */ }
+.err       { color:#f87171; height:18px; margin-top:12px; }
   </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
 </head>
 <body>
   <div id="debug">Connecting…</div>
+  <!-- LOGIN GATE ----------------------------------------------------------------->
+<div id="loginGate" class="gate">
+  <h2>Welcome to Mini-IO Online</h2>
+  <p class="tagline">Build, explore, and chat in real-time.</p>
+
+  <div class="btnRow">
+    <button id="guestBtn" class="guest">Play&nbsp;as&nbsp;Guest</button>
+
+    <!-- Google button placeholder -->
+    <div id="gSignIn"></div>
+  </div>
+  <p id="loginMsg" class="err"></p>
+</div>
+
 
   <div id="overlay" class="hidden">
     <div class="card">

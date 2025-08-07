@@ -1,6 +1,7 @@
 // ES-module imports from CDN (no bundler)
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
+import { initLoginGate } from './login.js';
 
 const debug = document.getElementById('debug');
 const overlay = document.getElementById('overlay');
@@ -416,13 +417,53 @@ function sendChat() {
 chatSend.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendChat(); } });
 
-// ----------------- Socket flow -----------------
 socket.on('connect', () => {
   debug.textContent = 'Connected ✔';
-  overlay.classList.remove('hidden');   // show setup UI
+
+  // Show the gate first
+  initLoginGate({
+    onGuest: () => {
+      document.getElementById('loginGate').style.display = 'none';
+      showCharCreator();                 // old flow
+    },
+    onGoogle: (idToken) => {
+      document.getElementById('loginGate').style.display = 'none';
+      showCharCreator(idToken);          // pass token along
+    }
+  });
+});
+
+function showCharCreator(idToken = null) {
+  overlay.classList.remove('hidden');
   initPreview();
   updatePreviewColor(palette[selectedIdx]);
-});
+  // defer registering until Start is pressed
+  startBtn.onclick = () => {
+    const displayName = nameInput.value.trim() || "Player";
+    overlay.classList.add('hidden');
+    disposePreview();
+    chatBar.classList.remove('hidden');
+    setTimeout(() => chatInput.focus(), 50);
+
+    if (idToken) {
+      socket.emit("googleLogin", { idToken, name: displayName, color: selectedColor });
+    } else {
+      socket.emit("registerGuest", { name: displayName, color: selectedColor });
+    }
+  };
+}
+function addLogout() {
+  const btn = document.createElement('button');
+  btn.textContent = "Logout";
+  btn.style.cssText = "position:fixed; right:16px; bottom:16px; padding:10px 18px; background:#dc2626; color:#fff; border:0; border-radius:12px; cursor:pointer; z-index:9;";
+  document.body.appendChild(btn);
+  btn.onclick = () => {
+    google.accounts.id.disableAutoSelect();
+    location.reload();
+  };
+}
+
+
 
 startBtn.onclick = () => {
   const name = nameInput.value.trim();

@@ -437,22 +437,35 @@ function showCharCreator(idToken = null) {
   overlay.classList.remove('hidden');
   initPreview();
   updatePreviewColor(palette[selectedIdx]);
-  // defer registering until Start is pressed
+
+  // — register only after the player clicks “Start” —
   startBtn.onclick = () => {
-    const displayName = nameInput.value.trim() || "Player";
+    const displayName = nameInput.value.trim() || 'Player';
+
     overlay.classList.add('hidden');
     disposePreview();
+
     chatBar.classList.remove('hidden');
     setTimeout(() => chatInput.focus(), 50);
 
     if (idToken) {
-      socket.emit("googleLogin", { idToken, name: displayName, color: selectedColor });
-      if (idToken) addLogout();
+      // Google-authenticated path
+      socket.emit('googleLogin', {
+        idToken,
+        name:  displayName,
+        color: selectedColor
+      });
+      addLogout();            // put the red “Logout” button on screen
     } else {
-      socket.emit("registerGuest", { name: displayName, color: selectedColor });
+      // Guest path
+      socket.emit('registerGuest', {
+        name:  displayName,
+        color: selectedColor
+      });
     }
   };
 }
+
 function addLogout() {
   const btn = document.createElement('button');
   btn.textContent = "Logout";
@@ -464,10 +477,6 @@ function addLogout() {
   };
 }
 
-  // show chat bar
-  chatBar.classList.remove('hidden');
-  setTimeout(() => chatInput.focus(), 50);
-};
 
 socket.on('currentPlayers', ({ players: list, you }) => {
   myId = you;

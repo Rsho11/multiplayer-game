@@ -1,209 +1,185 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Multiplayer FBX Game</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    html, body { height:100%; margin:0; }
-    body { overflow:hidden; background:#0b0e16; font-family:system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
-    #debug { position:fixed; left:8px; top:6px; padding:4px 8px; background:rgba(0,0,0,.45); color:#cbd5e1; font-size:12px; border-radius:6px; z-index:20; }
+<meta charset="UTF-8"/>
+<title>Mini-IO Online</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 
-    /* Overlay (unchanged) */
-    #overlay {
-      position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
-      background:#0b0e16; color:#e2e8f0; z-index:10; transition:opacity .25s ease;
-    }
-    #overlay.hidden { pointer-events:none; opacity:0; }
-    .card { width:min(560px, 94vw); background:#0f1423; border:1px solid #1f2a44;
-      border-radius:16px; padding:20px; box-shadow:0 10px 30px rgba(0,0,0,.45); }
-    .title { margin:0 0 8px; font-weight:700; font-size:20px; }
-    .subtitle { margin:0 12px 16px 0; color:#94a3b8; font-size:13px; }
+<!-- ============ Base layout ============ -->
+<style>
+html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{overflow:hidden;background:#0b0e16}
 
-    /* Preview panel */
-    #previewWrap {
-      width:100%; height:300px; border-radius:12px; overflow:hidden;
-      background: radial-gradient(120% 60% at 50% 100%, #131a28, #0f1423 60%, #0b0e16 100%);
-      border:1px solid #1f2a44; margin-bottom:14px; position:relative; user-select:none;
-      cursor: grab;
-    }
-    #previewWrap:active { cursor:grabbing; }
-    #previewHint {
-      position:absolute; right:10px; bottom:8px; font-size:11px; color:#94a3b8; opacity:.9;
-      background:rgba(0,0,0,.35); padding:4px 8px; border-radius:8px;
-    }
+/* tiny debug label top-left */
+#debug{position:fixed;left:8px;top:6px;padding:4px 8px;
+  background:rgba(0,0,0,.45);color:#cbd5e1;font-size:12px;border-radius:6px;z-index:20}
+</style>
 
-    /* Color wheel */
-    .wheel { position:relative; width:240px; height:240px; margin:10px auto 6px; }
-    .swatch {
-      position:absolute; width:44px; height:44px; border-radius:999px; border:2px solid #0f1423;
-      box-shadow:0 6px 14px rgba(0,0,0,.35); cursor:pointer; transform:translate(-50%,-50%);
-      outline:2px solid transparent; transition: outline .15s ease, transform .15s ease;
-    }
-    .swatch.selected { outline:2px solid #e2e8f0; transform:translate(-50%,-50%) scale(1.05); }
-    .legend { text-align:center; color:#94a3b8; font-size:12px; margin-top:4px; }
+<!-- ============ Waiting-Room backdrop ============ -->
+<style>
+/* vignette + oven glow (behind everything visual but above page bg) */
+body::before,body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0}
 
-    .row { display:flex; gap:12px; align-items:center; margin:12px 0 4px; }
-    input[type="text"] {
-      flex:1; background:#0b1020; border:1px solid #1f2a44; color:#e2e8f0;
-      padding:10px 12px; border-radius:10px; outline:none;
-    }
-    button#startBtn {
-      background:#2563eb; color:white; border:0; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer;
-    }
-    button#startBtn:disabled { opacity:.6; cursor:not-allowed; }
-
-    /* NEW: Chat bar */
-    #chatBar {
-      position:fixed; left:50%; bottom:14px; transform:translateX(-50%);
-      display:flex; gap:8px; align-items:center; z-index:9;
-      background:rgba(9,13,24,0.7); border:1px solid #1f2a44; padding:8px; border-radius:12px;
-      backdrop-filter: blur(6px);
-      width:min(640px, 92vw);
-    }
-    #chatBar.hidden { display:none; }
-    #chatInput {
-      flex:1; background:#0b1020; border:1px solid #1f2a44; color:#e2e8f0;
-      padding:10px 12px; border-radius:10px; outline:none;
-    }
-    #chatSend {
-      background:#334155; color:#e2e8f0; border:0; border-radius:10px; padding:10px 14px; font-weight:600; cursor:pointer;
-    }
-    .gate      { position:fixed; inset:0; display:flex; flex-direction:column;
-             justify-content:center; align-items:center; background:#0b0e16;
-             color:#e2e8f0; z-index:15; }
-.gate .tagline { color:#94a3b8; margin-top:4px; margin-bottom:22px; }
-.btnRow    { display:flex; gap:18px; }
-button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
-               padding:12px 26px; border-radius:14px; font-size:17px; cursor:pointer; }
-#gSignIn   > div { /* Google button gets injected */ }
-.err       { color:#f87171; height:18px; margin-top:12px; }
-    /* Blinking caret for the typewriter (pure css) */
-#loginGate .tagline::after {
-  content: '';
-  display: inline-block;
-  width: .6ch;
-  height: 1.05em;
-  background: #e2e8f0;
-  margin-left: 2px;
-  animation: blink 1s steps(1) infinite;
-}
-@keyframes blink {50% {background: transparent}}
-
-  </style>
-  <style>
-/* ---- Waiting-Room backdrop ---- */
-/* ---- Waiting-Room backdrop ---- */
-body::before,           /* vignette */
-body::after{            /* oven glow */
-  z-index:0;            /* was –2 */
-}
-
-
-/* dark vignette around the edges */
+/* edge darkening */
 body::before{
   background:radial-gradient(110% 90% at 50% 60%,
-              rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 100%);
+              transparent 0%,rgba(0,0,0,.55) 100%);
 }
 
-/* warm orange glow in lower-left – subtle */
+/* subtle orange “oven” glow */
 body::after{
-  background:radial-gradient(550px 350px at 6% 92%,
-              rgba(255,110,40,0.20) 0%,
-              rgba(255,110,40,0.06) 45%,
-              rgba(255,110,40,0) 100%);
-  mix-blend-mode: screen;
-  animation: glowPulse 8s ease-in-out infinite alternate;
+  background:radial-gradient(560px 360px at 6% 92%,
+              rgba(255,110,40,.22) 0%,
+              rgba(255,110,40,.06) 45%,
+              transparent 100%);
+  mix-blend-mode:screen;
+  animation:glowPulse 8s ease-in-out infinite alternate;
 }
-@keyframes glowPulse{ to{ transform:scale(1.05); opacity:.85;} }
+@keyframes glowPulse{to{transform:scale(1.05);opacity:.85}}
 
-/* ---- floating dust motes ---- */
-/* ---- floating dust motes ---- */
-.dustWrap{
-  position:fixed; inset:0;
-  overflow:hidden; pointer-events:none;
-  z-index:1;          /* +1 puts motes above the glow/vignette */
-}
-
-.dust{
-  position:absolute; width:3px; height:3px;
-  background:#f0dcc4; border-radius:999px;
-  opacity:0; filter:blur(0.5px);
-  animation: drift 14s linear infinite;
-}
+/* ------ floating dust motes ------ */
+.dustWrap{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.dust{position:absolute;width:3px;height:3px;background:#f0dcc4;border-radius:50%;
+      opacity:0;filter:blur(.5px);
+      animation:drift 14s linear infinite}
 @keyframes drift{
-  0%   { transform:translateY(40vh) scale(.4); opacity:0; }
-  15%  { opacity:.3; }
-  60%  { opacity:.05; }
-  100% { transform:translateY(-110vh) scale(1); opacity:0; }
+ 0%   {transform:translateY(40vh) scale(.4);opacity:0}
+ 15%  {opacity:.3}
+ 60%  {opacity:.05}
+ 100% {transform:translateY(-110vh) scale(1);opacity:0}
 }
 </style>
 
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- ============ Login gate styles ============ -->
+<style>
+.gate{position:fixed;inset:0;display:flex;flex-direction:column;
+      justify-content:center;align-items:center;
+      color:#e2e8f0;z-index:15}
 
+.gate h2{margin:0 0 4px;font-size:24px;font-weight:700}
+.gate .tagline{color:#94a3b8;margin-bottom:24px;font-size:13px}
+
+#loginGate .tagline::after{content:'';display:inline-block;width:.6ch;height:1.05em;
+  background:#e2e8f0;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{background:transparent}}
+
+.btnRow{display:flex;gap:18px}
+button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
+  padding:12px 26px;border-radius:14px;font-size:17px;cursor:pointer}
+.err{color:#f87171;height:18px;margin-top:12px;font-size:13px}
+</style>
+
+<!-- ============ Character-creator / overlay / chat CSS ============ -->
+<style>
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+         background:#0b0e16;color:#e2e8f0;z-index:10;transition:opacity .25s}
+#overlay.hidden{pointer-events:none;opacity:0}
+
+.card{width:min(560px,94vw);background:#0f1423;border:1px solid #1f2a44;
+      border-radius:16px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.card .title{margin:0 0 8px;font-weight:700;font-size:20px}
+.card .subtitle{margin:0 0 16px;color:#94a3b8;font-size:13px}
+
+/* preview panel */
+#previewWrap{width:100%;height:300px;border-radius:12px;overflow:hidden;
+  background:radial-gradient(120% 60% at 50% 100%,#131a28,#0f1423 60%,#0b0e16 100%);
+  border:1px solid #1f2a44;margin-bottom:14px;position:relative;user-select:none;cursor:grab}
+#previewWrap:active{cursor:grabbing}
+#previewHint{position:absolute;right:10px;bottom:8px;font-size:11px;color:#94a3b8;opacity:.9;
+  background:rgba(0,0,0,.35);padding:4px 8px;border-radius:8px}
+
+/* colour wheel, inputs, etc.  (unchanged from your file) */
+.wheel{position:relative;width:240px;height:240px;margin:10px auto 6px}
+.swatch{position:absolute;width:44px;height:44px;border-radius:999px;border:2px solid #0f1423;
+  box-shadow:0 6px 14px rgba(0,0,0,.35);cursor:pointer;transform:translate(-50%,-50%);
+  outline:2px solid transparent;transition:outline .15s,transform .15s}
+.swatch.selected{outline:2px solid #e2e8f0;transform:translate(-50%,-50%) scale(1.05)}
+.legend{text-align:center;color:#94a3b8;font-size:12px;margin-top:4px}
+
+.row{display:flex;gap:12px;align-items:center;margin:12px 0 4px}
+.row input{flex:1;background:#0b1020;border:1px solid #1f2a44;color:#e2e8f0;
+  padding:10px 12px;border-radius:10px;outline:none}
+#startBtn{background:#2563eb;color:#fff;border:0;border-radius:10px;padding:10px 14px;
+  font-weight:600;cursor:pointer}
+#startBtn:disabled{opacity:.6;cursor:not-allowed}
+
+/* chat bar */
+#chatBar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+  display:flex;gap:8px;align-items:center;z-index:9;
+  background:rgba(9,13,24,.7);border:1px solid #1f2a44;padding:8px;border-radius:12px;
+  backdrop-filter:blur(6px);width:min(640px,92vw)}
+#chatBar.hidden{display:none}
+#chatInput{flex:1;background:#0b1020;border:1px solid #1f2a44;color:#e2e8f0;
+  padding:10px 12px;border-radius:10px;outline:none}
+#chatSend{background:#334155;color:#e2e8f0;border:0;border-radius:10px;
+  padding:10px 14px;font-weight:600;cursor:pointer}
+</style>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body>
-  <div id="debug">Connecting…</div>
-  <div class="dustWrap" id="dust"></div>
 
-  <!-- LOGIN GATE ----------------------------------------------------------------->
+<body>
+<div id="debug">Connecting…</div>
+
+<!-- dust motes container -->
+<div class="dustWrap" id="dust"></div>
+
+<!-- =================== LOGIN GATE =================== -->
 <div id="loginGate" class="gate">
   <h2>Welcome to Mini-IO Online</h2>
   <p class="tagline">Build, explore, and chat in real-time.</p>
 
   <div class="btnRow">
     <button id="guestBtn" class="guest">Play&nbsp;as&nbsp;Guest</button>
-
-    <!-- Google button placeholder -->
     <div id="gSignIn"></div>
   </div>
   <p id="loginMsg" class="err"></p>
 </div>
 
+<!-- =================== CHARACTER CREATOR =================== -->
+<div id="overlay" class="hidden">
+  <div class="card">
+    <h3 class="title">Create your character</h3>
+    <p class="subtitle">Pick a colour and a display name. Drag the preview to rotate.</p>
 
-  <div id="overlay" class="hidden">
-    <div class="card">
-      <h3 class="title">Create your character</h3>
-      <p class="subtitle">Pick a color and a display name. Preview rotates by dragging left/right.</p>
+    <div id="previewWrap"><div id="previewHint">Drag to rotate</div></div>
+    <div class="wheel" id="wheel"></div>
+    <div class="legend" id="colorHex">#4ADE80</div>
 
-      <div id="previewWrap">
-        <div id="previewHint">Drag to rotate</div>
-      </div>
-
-      <div class="wheel" id="wheel"></div>
-      <div class="legend" id="colorHex">#4ADE80</div>
-
-      <div class="row">
-        <input id="nameInput" type="text" placeholder="Your name (e.g., Nova)" maxlength="18" />
-        <button id="startBtn" disabled>Start</button>
-      </div>
+    <div class="row">
+      <input id="nameInput" type="text" placeholder="Your name (e.g. Nova)" maxlength="18">
+      <button id="startBtn" disabled>Start</button>
     </div>
   </div>
+</div>
 
-  <!-- NEW: Chat bar (hidden until Start) -->
-  <div id="chatBar" class="hidden">
-    <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off" />
-    <button id="chatSend">Send</button>
-  </div>
+<!-- =================== CHAT BAR =================== -->
+<div id="chatBar" class="hidden">
+  <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off">
+  <button id="chatSend">Send</button>
+</div>
+
+<!-- ======== dust motes generator ======== -->
 <script>
-/* create 60 motes with random x/start-delay */
 const wrap=document.getElementById('dust');
 for(let i=0;i<60;i++){
   const d=document.createElement('div');
   d.className='dust';
-  d.style.left = Math.random()*100 + 'vw';
-  d.style.animationDelay = (-Math.random()*12)+'s'; // start at random point
+  d.style.left=Math.random()*100+'vw';
+  d.style.animationDelay=(-Math.random()*12)+'s';
   wrap.appendChild(d);
 }
 </script>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script type="module" src="main.js?v=9"></script>
-    <script type="importmap">
+<!-- ========= app scripts ========= -->
+<script src="/socket.io/socket.io.js"></script>
+<script type="module" src="main.js"></script>
+<script type="importmap">
 {
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
-    "three/examples/jsm/loaders/FBXLoader.js": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js"
+  "imports":{
+    "three":"https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+    "three/examples/jsm/loaders/FBXLoader.js":"https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js"
   }
 }
 </script>

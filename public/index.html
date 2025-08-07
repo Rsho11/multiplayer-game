@@ -91,11 +91,58 @@ button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
 @keyframes blink {50% {background: transparent}}
 
   </style>
+  <style>
+/* ---- Waiting-Room backdrop ---- */
+body::before,           /* vignette */
+body::after {           /* oven glow */
+  content:"";
+  position:fixed; inset:0;
+  pointer-events:none; z-index:-2;
+}
+
+/* dark vignette around the edges */
+body::before{
+  background:radial-gradient(110% 90% at 50% 60%,
+              rgba(0,0,0,0) 0%, rgba(0,0,0,.55) 100%);
+}
+
+/* warm orange glow in lower-left – subtle */
+body::after{
+  background:radial-gradient(550px 350px at 6% 92%,
+              rgba(255,110,40,0.20) 0%,
+              rgba(255,110,40,0.06) 45%,
+              rgba(255,110,40,0) 100%);
+  mix-blend-mode: screen;
+  animation: glowPulse 8s ease-in-out infinite alternate;
+}
+@keyframes glowPulse{ to{ transform:scale(1.05); opacity:.85;} }
+
+/* ---- floating dust motes ---- */
+.dustWrap{
+  position:fixed; inset:0;
+  overflow:hidden; pointer-events:none; z-index:-1;
+}
+.dust{
+  position:absolute; width:3px; height:3px;
+  background:#f0dcc4; border-radius:999px;
+  opacity:0; filter:blur(0.5px);
+  animation: drift 14s linear infinite;
+}
+@keyframes drift{
+  0%   { transform:translateY(40vh) scale(.4); opacity:0; }
+  15%  { opacity:.3; }
+  60%  { opacity:.05; }
+  100% { transform:translateY(-110vh) scale(1); opacity:0; }
+}
+</style>
+
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
 </head>
 <body>
   <div id="debug">Connecting…</div>
+  <div class="dustWrap" id="dust"></div>
+
   <!-- LOGIN GATE ----------------------------------------------------------------->
 <div id="loginGate" class="gate">
   <h2>Welcome to Mini-IO Online</h2>
@@ -135,6 +182,17 @@ button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
     <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off" />
     <button id="chatSend">Send</button>
   </div>
+<script>
+/* create 60 motes with random x/start-delay */
+const wrap=document.getElementById('dust');
+for(let i=0;i<60;i++){
+  const d=document.createElement('div');
+  d.className='dust';
+  d.style.left = Math.random()*100 + 'vw';
+  d.style.animationDelay = (-Math.random()*12)+'s'; // start at random point
+  wrap.appendChild(d);
+}
+</script>
 
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="main.js?v=9"></script>

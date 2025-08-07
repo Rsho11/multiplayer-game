@@ -93,12 +93,16 @@ button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
   </style>
   <style>
 /* ---- Waiting-Room backdrop ---- */
+/* ---- Waiting-Room backdrop ---- */
 body::before,           /* vignette */
-body::after {           /* oven glow */
-  content:"";
-  position:fixed; inset:0;
-  pointer-events:none; z-index:-2;
+body::after{            /* oven glow */
+  z-index:0;            /* was –2 */
 }
+
+.dustWrap{               /* floating dust motes */
+  z-index:0;            /* was –1 */
+}
+
 
 /* dark vignette around the edges */
 body::before{

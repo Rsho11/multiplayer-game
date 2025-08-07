@@ -78,6 +78,18 @@ button.guest { background:#10b981; border:0; color:#fff; font-weight:600;
                padding:12px 26px; border-radius:14px; font-size:17px; cursor:pointer; }
 #gSignIn   > div { /* Google button gets injected */ }
 .err       { color:#f87171; height:18px; margin-top:12px; }
+    /* Blinking caret for the typewriter (pure css) */
+#loginGate .tagline::after {
+  content: '';
+  display: inline-block;
+  width: .6ch;
+  height: 1.05em;
+  background: #e2e8f0;
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+@keyframes blink {50% {background: transparent}}
+
   </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 

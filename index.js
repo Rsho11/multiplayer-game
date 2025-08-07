@@ -3,7 +3,7 @@ const http      = require("http");
 const { Server } = require("socket.io");
 const { OAuth2Client } = require("google-auth-library");  // NEW
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "YOUR_CLIENT_ID_HERE";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "410563389240-cj67c6dalqbg1d7dllba097327gs23pa.apps.googleusercontent.com";
 const oauth = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 const app = express();

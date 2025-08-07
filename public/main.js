@@ -3,6 +3,13 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.m
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
 import { initLoginGate } from './login.js';
 
+function decodeJwtPayload (jwt) {
+  try {
+    return JSON.parse(atob(jwt.split('.')[1]));
+  } catch { return {}; }
+}
+
+
 const debug = document.getElementById('debug');
 const overlay = document.getElementById('overlay');
 const wheel = document.getElementById('wheel');
@@ -438,6 +445,18 @@ function showCharCreator(idToken = null) {
   initPreview();
   updatePreviewColor(palette[selectedIdx]);
 
+  // If we’re logged-in, show profile line
+  if (idToken) {
+    const { name, picture } = decodeJwtPayload(idToken);
+    const infoRow = document.createElement('div');
+    infoRow.className = 'profileRow';
+    infoRow.innerHTML = `
+      <img src="${picture}" style="width:32px;height:32px;border-radius:50%;margin-right:8px">
+      <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>`;
+    overlay.querySelector('.subtitle').after(infoRow);
+  }
+
+  startBtn.onclick = () => {
   // — register only after the player clicks “Start” —
   startBtn.onclick = () => {
     const displayName = nameInput.value.trim() || 'Player';

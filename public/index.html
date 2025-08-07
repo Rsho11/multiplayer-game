@@ -99,10 +99,6 @@ body::after{            /* oven glow */
   z-index:0;            /* was –2 */
 }
 
-.dustWrap{               /* floating dust motes */
-  z-index:0;            /* was –1 */
-}
-
 
 /* dark vignette around the edges */
 body::before{
@@ -122,10 +118,13 @@ body::after{
 @keyframes glowPulse{ to{ transform:scale(1.05); opacity:.85;} }
 
 /* ---- floating dust motes ---- */
+/* ---- floating dust motes ---- */
 .dustWrap{
   position:fixed; inset:0;
-  overflow:hidden; pointer-events:none; z-index:-1;
+  overflow:hidden; pointer-events:none;
+  z-index:1;          /* +1 puts motes above the glow/vignette */
 }
+
 .dust{
   position:absolute; width:3px; height:3px;
   background:#f0dcc4; border-radius:999px;

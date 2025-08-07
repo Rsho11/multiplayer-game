@@ -14,6 +14,12 @@ export function initLoginGate({ onGuest, onGoogle }) {
       loginMsg.textContent = "";               // clear errors
       onGoogle(resp.credential);               // send the JWT upward
     }
+    callback: (resp) => {
+  console.log('got token', resp.credential);   // <— should print a long JWT
+  loginMsg.textContent = '';
+  onGoogle(resp.credential);
+}
+
   });
   google.accounts.id.renderButton(
     document.getElementById("gSignIn"),

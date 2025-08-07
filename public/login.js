@@ -1,36 +1,36 @@
-// login.js – handles the “Play as Guest / Sign-in with Google” gate
+/* login.js – gate + persistent sign-in */
 export function initLoginGate({ onGuest, onGoogle }) {
   const loginGate = document.getElementById('loginGate');
   const guestBtn  = document.getElementById('guestBtn');
   const loginMsg  = document.getElementById('loginMsg');
 
-  // ---------------------------------------------------------------------------
-  // 1. “Play as Guest” – just close the gate and let the caller proceed
-  // ---------------------------------------------------------------------------
   guestBtn.onclick = onGuest;
 
-  // ---------------------------------------------------------------------------
-  // 2. Google Identity Services (GIS)
-  // ---------------------------------------------------------------------------
   /* global google */
   google.accounts.id.initialize({
-    client_id: '410563389240-cj67c6dalqbg1d7dllba097327gs23pa.apps.googleusercontent.com', // ← your real client-ID
-    ux_mode  : 'popup',
-    callback : (resp) => {
-      console.log('got token', resp.credential);  // debug – remove if you like
-      loginMsg.textContent = '';                  // clear any previous error
-      onGoogle(resp.credential);                  // bubble the JWT up
+    client_id : '410563389240-cj67c6dalqbg1d7dllba097327gs23pa.apps.googleusercontent.com',
+    ux_mode   : 'popup',
+    auto_select : true,          // <── keeps them signed-in
+    callback  : (resp) => {
+      console.log('got token', resp.credential);
+      loginGate.style.display = 'none';        // hide gate instantly
+      onGoogle(resp.credential);
     }
   });
 
-  google.accounts.id.renderButton(
-    document.getElementById('gSignIn'),
-    { theme: 'filled', size: 'large', type: 'standard', shape: 'pill', text: 'signin_with' }
-  );
+  // Ask GIS whether it can auto-sign-in.  If not, we’ll render buttons below.
+  google.accounts.id.prompt((notification) => {
+    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+      // Auto-sign-in failed ➜ show the gate with our buttons
+      renderButtons();
+    }
+  });
 
-  // ---------------------------------------------------------------------------
-  // helper so caller can hide the gate when they’re ready
-  // ---------------------------------------------------------------------------
-  function closeGate() { loginGate.style.display = 'none'; }
-  return closeGate;
+  function renderButtons() {
+    loginGate.style.display = 'flex';          // gate is hidden by default
+    google.accounts.id.renderButton(
+      document.getElementById('gSignIn'),
+      { theme:'filled', size:'large', type:'standard', shape:'pill', text:'signin_with' }
+    );
+  }
 }

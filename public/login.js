@@ -8,7 +8,7 @@ export function initLoginGate({ onGuest, onGoogle }) {
 
   /* global google */
   google.accounts.id.initialize({
-    client_id: "YOUR_CLIENT_ID_HERE",          // <—— paste yours
+    client_id: "410563389240-cj67c6dalqbg1d7dllba097327gs23pa.apps.googleusercontent.com",          // <—— paste yours
     ux_mode: "popup",
     callback: (resp) => {
       loginMsg.textContent = "";               // clear errors

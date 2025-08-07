@@ -447,6 +447,7 @@ function showCharCreator(idToken = null) {
 
     if (idToken) {
       socket.emit("googleLogin", { idToken, name: displayName, color: selectedColor });
+      if (idToken) addLogout();
     } else {
       socket.emit("registerGuest", { name: displayName, color: selectedColor });
     }
@@ -462,15 +463,6 @@ function addLogout() {
     location.reload();
   };
 }
-
-
-
-startBtn.onclick = () => {
-  const name = nameInput.value.trim();
-  if (!name) return;
-  overlay.classList.add('hidden');
-  disposePreview();
-  socket.emit('register', { name, color: selectedColor });
 
   // show chat bar
   chatBar.classList.remove('hidden');

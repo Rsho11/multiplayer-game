@@ -450,10 +450,8 @@ function showCharCreator(idToken = null) {
     `;
     overlay.querySelector('.subtitle').after(infoRow);
   }
-}
 
-
-  // Register only after “Start”
+  // ✅ This MUST be inside showCharCreator
   startBtn.onclick = () => {
     const displayName = nameInput.value.trim() || 'Player';
 
@@ -469,6 +467,8 @@ function showCharCreator(idToken = null) {
       socket.emit('registerGuest', { name: displayName, color: selectedColor });
     }
   };
+}
+
 function addLogout () {
   const btn = document.createElement('button');
   btn.textContent = 'Logout';

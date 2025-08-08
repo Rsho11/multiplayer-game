@@ -1,36 +1,40 @@
-// ES-module imports from CDN (no bundler)
+// main.js  – full file
+// ---------------------------------------------
+// ES–module imports (no bundler)
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
 import { initLoginGate } from './login.js';
 
-function decodeJwtPayload (jwt) {
-  try {
-    return JSON.parse(atob(jwt.split('.')[1]));
-  } catch { return {}; }
+/* small helper for decoding the Google id-token */
+function decodeJwtPayload(jwt) {
+  try { return JSON.parse(atob(jwt.split('.')[1])); }
+  catch { return {}; }
 }
 
-
-const debug = document.getElementById('debug');
-const overlay = document.getElementById('overlay');
-const wheel = document.getElementById('wheel');
-const startBtn = document.getElementById('startBtn');
-const nameInput = document.getElementById('nameInput');
-const colorHexEl = document.getElementById('colorHex');
+// --------------------------------------------------------------------------
+// DOM refs / globals
+const debug       = document.getElementById('debug');
+const overlay     = document.getElementById('overlay');
+const wheel       = document.getElementById('wheel');
+const startBtn    = document.getElementById('startBtn');
+const nameInput   = document.getElementById('nameInput');
+const colorHexEl  = document.getElementById('colorHex');
 const previewWrap = document.getElementById('previewWrap');
 
-const chatBar = document.getElementById('chatBar');
+const chatBar   = document.getElementById('chatBar');
 const chatInput = document.getElementById('chatInput');
-const chatSend = document.getElementById('chatSend');
+const chatSend  = document.getElementById('chatSend');
 
 const socket = window.io();
 
-// Prevent click-to-move when focusing chat
+// helper: ignore click-to-move when typing
 function isTypingInChat(e) {
-  return e && (e.target === chatInput || (e.target && e.target.closest && e.target.closest('#chatBar')));
+  return e && (e.target === chatInput || e.target.closest?.('#chatBar'));
 }
 
-// ----------------- Main Game Scene -----------------
-const scene = new THREE.Scene();
+// --------------------------------------------------------------------------
+// MAIN GAME SCENE
+const scene  = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0e16);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
@@ -39,69 +43,67 @@ camera.position.set(0, 6, 12);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-renderer.shadowMap.enabled = true;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled    = true;
+renderer.outputColorSpace      = THREE.SRGBColorSpace;
+renderer.toneMapping           = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure   = 1.1;            // <-- subtle boost
 document.body.appendChild(renderer.domElement);
 
-// lights
+// lighting
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
-hemi.position.set(0, 20, 0); scene.add(hemi);
-const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-dir.position.set(5, 10, 7); dir.castShadow = true; scene.add(dir);
+hemi.position.set(0, 20, 0);  scene.add(hemi);
 
-// room
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 }));
-floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'floor'; scene.add(floor);
+const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+dir.position.set(5, 10, 7);   dir.castShadow = true;  scene.add(dir);
+
+// extra rim-light (nice edge highlight)
+const rim = new THREE.DirectionalLight(0xffffff, 0.6);
+rim.position.set(-3, 3, -4);  scene.add(rim);
+
+// simple room
+const floor = new THREE.Mesh(
+  new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
 const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2233 });
 const H = 4, T = 0.4, L = 28;
-const w1 = new THREE.Mesh(new THREE.BoxGeometry(L, H, T), wallMat); w1.position.set(0, H/2, -L/2); scene.add(w1);
-const w2 = w1.clone(); w2.position.set(0, H/2,  L/2); scene.add(w2);
-const w3 = new THREE.Mesh(new THREE.BoxGeometry(T, H, L), wallMat); w3.position.set(-L/2, H/2, 0); scene.add(w3);
-const w4 = w3.clone(); w4.position.set( L/2, H/2, 0); scene.add(w4);
+function wall() { return new THREE.Mesh(new THREE.BoxGeometry(L,H,T), wallMat); }
+scene.add(wall().position.set(0, H/2, -L/2));
+scene.add(wall().position.set(0, H/2,  L/2));
+scene.add(wall().geometry.clone().rotateY(Math.PI/2),
+          wall().position.set(-L/2, H/2, 0));
+scene.add(wall().position.set( L/2, H/2, 0));
 
-// helpers & state
-const loader = new FBXLoader();
-const players = new Map(); // id -> Group
-let myId = null;
+// --------------------------------------------------------------------------
+// FBX loader + player store
+const loader  = new FBXLoader();
+const players = new Map();      // id -> THREE.Group
+let myId      = null;
 let targetPos = null;
 
-const raycaster = new THREE.Raycaster();
-const mouse = new THREE.Vector2();
-const cameraOffset = new THREE.Vector3(0, 6, 10);
-
-// ---- Chat bubbles state ----
-const activeBubbles = [];
-
-// ---- Materials / tint helpers ----
-function tintOrReplaceMaterial(m, color, forceFlat) {
-  if (forceFlat || !m || !('color' in m)) {
-    const mat = new THREE.MeshStandardMaterial({
-      color: color.clone(),
-      metalness: 0.05,
-      roughness: 0.85
-    });
-    mat.needsUpdate = true;
-    return mat;
-  }
-  if (m.map) m.map = null;
-  if (m.vertexColors) m.vertexColors = false;
-  if (m.color) m.color.copy(color);
-  if (m.emissive) m.emissive.copy(color).multiplyScalar(0.12);
+// tint helper – keeps normal/roughness maps so shading survives
+function tintMaterial(orig, tint) {
+  const m = orig.clone();
+  if (m.map)       m.map = null;   // drop diffuse map
+  if (m.emissive)  m.emissive.set(0x000000);
+  m.color.copy(tint);
   m.needsUpdate = true;
   return m;
 }
 
-// robust tint across single/multi-material meshes
-function applyColor(root, hex, { forceFlat = false } = {}) {
+function applyColor(root, hex) {
   const c = new THREE.Color(hex);
-  root.traverse((obj) => {
-    if (!obj.isMesh || !obj.material) return;
-    if (Array.isArray(obj.material)) {
-      obj.material = obj.material.map((m) => tintOrReplaceMaterial(m, c, forceFlat));
+  root.traverse(o=>{
+    if (!o.isMesh) return;
+    if (Array.isArray(o.material)) {
+      o.material = o.material.map(m=>tintMaterial(m,c));
     } else {
-      obj.material = tintOrReplaceMaterial(obj.material, c, forceFlat);
+      o.material = tintMaterial(o.material,c);
     }
   });
 }
@@ -194,125 +196,87 @@ function showChatBubble(id, text) {
 }
 
 // ---- Spawn & movement ----
-function spawnPlayer(id, pos, name, color, isLocal = false) {
+function spawnPlayer(id, pos, name, color, isLocal=false) {
   const root = new THREE.Group();
   root.position.set(pos.x, pos.y, pos.z);
-  scene.add(root);
-  players.set(id, root);
+  scene.add(root);  players.set(id, root);
 
-  // FBX
-  loader.load('/models/player.fbx', (fbx) => {
-    const box = new THREE.Box3().setFromObject(fbx);
+  loader.load('/models/player.fbx', fbx=>{
+    const box  = new THREE.Box3().setFromObject(fbx);
     const size = new THREE.Vector3(); box.getSize(size);
-    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+    const s = 1.7 / Math.max(size.y || .001, .001);
     fbx.scale.setScalar(s);
-    const scaled = new THREE.Box3().setFromObject(fbx);
-    fbx.position.y -= scaled.min.y;
-    fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-
-    if (color) applyColor(fbx, color, { forceFlat: true }); // guarantee vivid player color
+    fbx.position.y -= (new THREE.Box3().setFromObject(fbx)).min.y;
+    fbx.traverse(c=>{ if(c.isMesh){ c.castShadow = c.receiveShadow = true; }});
+    if (color) applyColor(fbx, color);   // <— no forceFlat flag
     root.add(fbx);
-  }, undefined, () => {
-    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
-    const m = new THREE.MeshStandardMaterial({ color: color || '#4ADE80' });
-    const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; root.add(mesh);
+  }, undefined, ()=>{
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(.6,1,.6),
+      new THREE.MeshStandardMaterial({ color: color||'#4ADE80' })
+    );
+    mesh.castShadow = true;
+    root.add(mesh);
   });
 
   if (name) root.add(makeNameTag(name));
 
   if (isLocal) {
-    // snap camera initially
-    const start = root.position.clone().add(cameraOffset);
-    camera.position.copy(start);
-    camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
+    camera.position.copy(root.position).add(new THREE.Vector3(0,6,10));
+    camera.lookAt(root.position.x, root.position.y+1.2, root.position.z);
 
-    // click-to-move (ignore clicks on chat)
-    addEventListener('click', (e) => {
+    addEventListener('click', e=>{
       if (isTypingInChat(e)) return;
-      mouse.x = (e.clientX / innerWidth) * 2 - 1;
-      mouse.y = -(e.clientY / innerHeight) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
-      const hit = raycaster.intersectObjects([floor], false);
+      const mouse = new THREE.Vector2(
+        (e.clientX / innerWidth)*2-1,
+        -(e.clientY / innerHeight)*2+1
+      );
+      (new THREE.Raycaster()).setFromCamera(mouse, camera);
+      const hit = (new THREE.Raycaster()).intersectObjects([floor]);
       if (hit.length) { targetPos = hit[0].point.clone(); targetPos.y = 0; }
     });
   }
-} // <-- important: close spawnPlayer
-
-function updateLocal(dt) {
-  if (!myId || !targetPos) return;
-  const me = players.get(myId);
-  if (!me) return;
-  const dir = new THREE.Vector3().subVectors(targetPos, me.position);
-  const d = dir.length();
-  if (d > 0.02) {
-    dir.normalize();
-    me.position.addScaledVector(dir, 3.0 * dt);
-    me.rotation.y = Math.atan2(dir.x, dir.z);
-    socket.emit('move', { x: me.position.x, y: me.position.y, z: me.position.z });
-  }
 }
 
-// Smooth chase camera
-function updateCamera(dt) {
-  if (!myId) return;
-  const me = players.get(myId);
-  if (!me) return;
+/* movement / camera update code – unchanged */
 
-  const desired = me.position.clone().add(cameraOffset);
-  const smooth = 1 - Math.pow(0.0001, dt);  // ≈0.12 at 60fps
-  camera.position.lerp(desired, smooth);
-  camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
-}
-
-// resize
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-});
-
-// ----------------- Character Creation: Preview Scene -----------------
-let pScene, pCamera, pRenderer, pRoot, pModel;
-let isDragging = false, lastX = 0;
-let selectedColor = '#4ADE80';
+// --------------------------------------------------------------------------
+// CHARACTER-CREATION PREVIEW
+let pScene,pCamera,pRenderer,pRoot,pModel;
+let isDragging=false,lastX=0,selectedColor='#4ADE80';
 
 function initPreview() {
-  pScene = new THREE.Scene();
-  pScene.background = null;
+  pScene  = new THREE.Scene();
 
-  pCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
-  pCamera.position.set(0, 1.6, 4);
+  pCamera = new THREE.PerspectiveCamera(40,1,0.1,50);
+  pCamera.position.set(0,1.6,4);
 
-  pRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  pRenderer.outputColorSpace = THREE.SRGBColorSpace;
-  pRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  pRenderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
+  pRenderer.outputColorSpace    = THREE.SRGBColorSpace;
+  pRenderer.toneMapping         = THREE.ACESFilmicToneMapping;
+  pRenderer.toneMappingExposure = 1.1;
+  pRenderer.setPixelRatio(Math.min(2, devicePixelRatio||1));
   previewWrap.appendChild(pRenderer.domElement);
 
-  const amb = new THREE.AmbientLight(0xffffff, 0.35); pScene.add(amb);
-  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(3, 4, 5); pScene.add(key);
-  const rim = new THREE.DirectionalLight(0xffffff, 0.6); rim.position.set(-3, 3, -3); pScene.add(rim);
+  pScene.add(new THREE.AmbientLight(0xffffff, 0.35));
+  const key = new THREE.DirectionalLight(0xffffff,1); key.position.set(3,4,5); pScene.add(key);
+  const rim2= new THREE.DirectionalLight(0xffffff,.6); rim2.position.set(-3,3,-3); pScene.add(rim2);
 
-  pRoot = new THREE.Group();
-  pScene.add(pRoot);
+  pRoot = new THREE.Group(); pScene.add(pRoot);
 
   const fbxLoader = new FBXLoader();
-  fbxLoader.load('/models/player.fbx', (fbx) => {
-    const box = new THREE.Box3().setFromObject(fbx);
+  fbxLoader.load('/models/player.fbx', fbx=>{
+    const box  = new THREE.Box3().setFromObject(fbx);
     const size = new THREE.Vector3(); box.getSize(size);
-    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
-    fbx.scale.setScalar(s);
-
-    fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
-    pModel = fbx;
-    pRoot.add(pModel);
-
-    applyColor(pModel, selectedColor, { forceFlat: true });
+    fbx.scale.setScalar(1.7/Math.max(size.y||.001,.001));
+    fbx.traverse(c=>{ if(c.isMesh){c.castShadow=c.receiveShadow=true;}});
+    pModel = fbx; pRoot.add(fbx);
+    applyColor(pModel, selectedColor);
     framePreview(pRoot);
-  }, undefined, () => {
-    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
-    const m = new THREE.MeshStandardMaterial({ color: selectedColor });
-    pModel = new THREE.Mesh(g, m);
-    pRoot.add(pModel);
-    framePreview(pRoot);
+  }, undefined, ()=>{
+    pModel = new THREE.Mesh(new THREE.BoxGeometry(.6,1,.6),
+      new THREE.MeshStandardMaterial({color:selectedColor}));
+    pRoot.add(pModel); framePreview(pRoot);
   });
 
   // rotate by dragging

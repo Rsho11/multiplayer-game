@@ -341,8 +341,9 @@ function disposePreview() {
 
 function updatePreviewColor(hex) {
   selectedColor = hex;
-  if (pModel) applyColor(pModel, hex, { forceFlat: true });
+  if (pModel) applyColor(pModel, hex); 
 }
+
 
 // ----------------- UI: Color Wheel + Name -----------------
 const palette = ['#4ADE80','#60A5FA','#F472B6','#FBBF24','#34D399','#A78BFA','#F87171','#F59E0B'];

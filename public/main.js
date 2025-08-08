@@ -444,9 +444,10 @@ function showCharCreator(idToken = null) {
     const { name, picture } = decodeJwtPayload(idToken);
     const infoRow = document.createElement('div');
     infoRow.className = 'profileRow';
-    infoRow.innerHTML = 
+    infoRow.innerHTML = `
       <img src="${picture}" style="width:32px;height:32px;border-radius:50%;margin-right:8px">
-      <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>;
+      <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>
+    `;
     overlay.querySelector('.subtitle').after(infoRow);
   }
 }

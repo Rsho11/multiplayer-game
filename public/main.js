@@ -1,40 +1,36 @@
-// main.js  – full file
-// ---------------------------------------------
-// ES–module imports (no bundler)
+// ES-module imports from CDN (no bundler)
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js';
 import { FBXLoader } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/FBXLoader.js';
 import { initLoginGate } from './login.js';
 
-/* small helper for decoding the Google id-token */
-function decodeJwtPayload(jwt) {
-  try { return JSON.parse(atob(jwt.split('.')[1])); }
-  catch { return {}; }
+function decodeJwtPayload (jwt) {
+  try {
+    return JSON.parse(atob(jwt.split('.')[1]));
+  } catch { return {}; }
 }
 
-// --------------------------------------------------------------------------
-// DOM refs / globals
-const debug       = document.getElementById('debug');
-const overlay     = document.getElementById('overlay');
-const wheel       = document.getElementById('wheel');
-const startBtn    = document.getElementById('startBtn');
-const nameInput   = document.getElementById('nameInput');
-const colorHexEl  = document.getElementById('colorHex');
+
+const debug = document.getElementById('debug');
+const overlay = document.getElementById('overlay');
+const wheel = document.getElementById('wheel');
+const startBtn = document.getElementById('startBtn');
+const nameInput = document.getElementById('nameInput');
+const colorHexEl = document.getElementById('colorHex');
 const previewWrap = document.getElementById('previewWrap');
 
-const chatBar   = document.getElementById('chatBar');
+const chatBar = document.getElementById('chatBar');
 const chatInput = document.getElementById('chatInput');
-const chatSend  = document.getElementById('chatSend');
+const chatSend = document.getElementById('chatSend');
 
 const socket = window.io();
 
-// helper: ignore click-to-move when typing
+// Prevent click-to-move when focusing chat
 function isTypingInChat(e) {
-  return e && (e.target === chatInput || e.target.closest?.('#chatBar'));
+  return e && (e.target === chatInput || (e.target && e.target.closest && e.target.closest('#chatBar')));
 }
 
-// --------------------------------------------------------------------------
-// MAIN GAME SCENE
-const scene  = new THREE.Scene();
+// ----------------- Main Game Scene -----------------
+const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b0e16);
 
 const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
@@ -43,82 +39,68 @@ camera.position.set(0, 6, 12);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-renderer.shadowMap.enabled    = true;
-renderer.outputColorSpace      = THREE.SRGBColorSpace;
-renderer.toneMapping           = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure   = 1.1;            // <-- subtle boost
+renderer.shadowMap.enabled = true;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
-// lighting
+// lights
 scene.add(new THREE.AmbientLight(0xffffff, 0.25));
 const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
-hemi.position.set(0, 20, 0);  scene.add(hemi);
-
+hemi.position.set(0, 20, 0); scene.add(hemi);
 const dir = new THREE.DirectionalLight(0xffffff, 1.0);
-dir.position.set(5, 10, 7);   dir.castShadow = true;  scene.add(dir);
+dir.position.set(5, 10, 7); dir.castShadow = true; scene.add(dir);
 
-// extra rim-light (nice edge highlight)
-const rim = new THREE.DirectionalLight(0xffffff, 0.6);
-rim.position.set(-3, 3, -4);  scene.add(rim);
-
-// simple room
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-scene.add(floor);
-
-// ---------- room ----------  ✅ fixed
-const wallMat = new THREE.MeshStandardMaterial({color: 0x1e2233});
+// room
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(30, 30),
+  new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'floor'; scene.add(floor);
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2233 });
 const H = 4, T = 0.4, L = 28;
+const w1 = new THREE.Mesh(new THREE.BoxGeometry(L, H, T), wallMat); w1.position.set(0, H/2, -L/2); scene.add(w1);
+const w2 = w1.clone(); w2.position.set(0, H/2,  L/2); scene.add(w2);
+const w3 = new THREE.Mesh(new THREE.BoxGeometry(T, H, L), wallMat); w3.position.set(-L/2, H/2, 0); scene.add(w3);
+const w4 = w3.clone(); w4.position.set( L/2, H/2, 0); scene.add(w4);
 
-function wall(w, h, t) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), wallMat);
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-const back  = wall(L, H, T);  back.position.set(0, H / 2, -L / 2);
-const front = wall(L, H, T);  front.position.set(0, H / 2,  L / 2);
-
-const left  = wall(T, H, L);  left.position.set(-L / 2, H / 2, 0);
-const right = wall(T, H, L);  right.position.set( L / 2, H / 2, 0);
-left.rotation.y  = Math.PI / 2;
-right.rotation.y = Math.PI / 2;
-
-scene.add(back, front, left, right);
-
-
-// --------------------------------------------------------------------------
-// FBX loader + player store
-const loader  = new FBXLoader();
-const players = new Map();      // id -> THREE.Group
-let myId      = null;
+// helpers & state
+const loader = new FBXLoader();
+const players = new Map(); // id -> Group
+let myId = null;
 let targetPos = null;
-const activeBubbles = [];   
-const raycaster = new THREE.Raycaster();   // reusable ray-picker
-const mouse     = new THREE.Vector2();     // scratch vector
 
-// tint helper – keeps normal/roughness maps so shading survives
-function tintMaterial(orig, tint) {
-  const m = orig.clone();
-  if (m.map)       m.map = null;   // drop diffuse map
-  if (m.emissive)  m.emissive.set(0x000000);
-  m.color.copy(tint);
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+const cameraOffset = new THREE.Vector3(0, 6, 10);
+
+// ---- Chat bubbles state ----
+const activeBubbles = [];
+
+// ---- Materials / tint helpers ----
+function tintOrReplaceMaterial(m, color, forceFlat) {
+  if (forceFlat || !m || !('color' in m)) {
+    const mat = new THREE.MeshStandardMaterial({
+      color: color.clone(),
+      metalness: 0.05,
+      roughness: 0.85
+    });
+    mat.needsUpdate = true;
+    return mat;
+  }
+  if (m.map) m.map = null;
+  if (m.vertexColors) m.vertexColors = false;
+  if (m.color) m.color.copy(color);
+  if (m.emissive) m.emissive.copy(color).multiplyScalar(0.12);
   m.needsUpdate = true;
   return m;
 }
 
 function applyColor(root, hex) {
   const c = new THREE.Color(hex);
-  root.traverse(o=>{
-    if (!o.isMesh) return;
-    if (Array.isArray(o.material)) {
-      o.material = o.material.map(m=>tintMaterial(m,c));
+  root.traverse(obj=>{
+    if (!obj.isMesh) return;
+    if (Array.isArray(obj.material)) {
+      obj.material = obj.material.map(m=>tintMaterial(m,c));
     } else {
-      o.material = tintMaterial(o.material,c);
+      obj.material = tintMaterial(obj.material,c);
     }
   });
 }
@@ -209,124 +191,127 @@ function showChatBubble(id, text) {
   root.userData.chatBubble = bubble;
   activeBubbles.push({ sprite: bubble, root, ttl: 4.5 }); // seconds
 }
-/* -------------------------------------------------
-   SIMPLE LOCAL MOVEMENT  (unchanged from the first tutorial)
---------------------------------------------------*/
-const cameraOffset = new THREE.Vector3(0, 6, 10);
-
-function updateLocal(dt) {
-  if (!myId || !targetPos) return;
-  const me = players.get(myId);
-  if (!me) return;
-
-  const dir = new THREE.Vector3().subVectors(targetPos, me.position);
-  const d   = dir.length();
-  if (d > 0.02) {
-    dir.normalize();
-    me.position.addScaledVector(dir, 3.0 * dt);  // 3 m/s walk speed
-    me.rotation.y = Math.atan2(dir.x, dir.z);
-    socket.emit('move', { x: me.position.x, y: me.position.y, z: me.position.z });     // sync to server
-  }
-}
-
-function updateCamera(dt) {
-  if (!myId) return;
-  const me = players.get(myId);   if (!me) return;
-
-  const desired = me.position.clone().add(cameraOffset);
-  const lerpAmt = 1 - Math.pow(0.0001, dt);     // smooth ~0.12 @60 fps
-  camera.position.lerp(desired, lerpAmt);
-  camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
-}
-
 
 // ---- Spawn & movement ----
-function spawnPlayer(id, pos, name, color, isLocal=false) {
+function spawnPlayer(id, pos, name, color, isLocal = false) {
   const root = new THREE.Group();
   root.position.set(pos.x, pos.y, pos.z);
-  scene.add(root);  players.set(id, root);
+  scene.add(root);
+  players.set(id, root);
 
-  loader.load('/models/player.fbx', fbx=>{
-    const box  = new THREE.Box3().setFromObject(fbx);
+  // FBX
+  loader.load('/models/player.fbx', (fbx) => {
+    const box = new THREE.Box3().setFromObject(fbx);
     const size = new THREE.Vector3(); box.getSize(size);
-    const s = 1.7 / Math.max(size.y || .001, .001);
+    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
     fbx.scale.setScalar(s);
-    fbx.position.y -= (new THREE.Box3().setFromObject(fbx)).min.y;
-    fbx.traverse(c=>{ if(c.isMesh){ c.castShadow = c.receiveShadow = true; }});
-    if (color) applyColor(fbx, color);   // <— no forceFlat flag
+    const scaled = new THREE.Box3().setFromObject(fbx);
+    fbx.position.y -= scaled.min.y;
+    fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+
+    if (color) applyColor(fbx, color, { forceFlat: true }); // guarantee vivid player color
     root.add(fbx);
-  }, undefined, ()=>{
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(.6,1,.6),
-      new THREE.MeshStandardMaterial({ color: color||'#4ADE80' })
-    );
-    mesh.castShadow = true;
-    root.add(mesh);
+  }, undefined, () => {
+    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
+    const m = new THREE.MeshStandardMaterial({ color: color || '#4ADE80' });
+    const mesh = new THREE.Mesh(g, m); mesh.castShadow = true; root.add(mesh);
   });
 
   if (name) root.add(makeNameTag(name));
 
   if (isLocal) {
-    camera.position.copy(root.position).add(new THREE.Vector3(0, 6, 10));
+    // snap camera initially
+    const start = root.position.clone().add(cameraOffset);
+    camera.position.copy(start);
     camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
 
-    addEventListener('click', e => {
+    // click-to-move (ignore clicks on chat)
+    addEventListener('click', (e) => {
       if (isTypingInChat(e)) return;
-
-      mouse.set(
-        (e.clientX / innerWidth)  * 2 - 1,
-       -(e.clientY / innerHeight) * 2 + 1
-      );
+      mouse.x = (e.clientX / innerWidth) * 2 - 1;
+      mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
-
       const hit = raycaster.intersectObjects([floor], false);
-      if (hit.length) {
-        targetPos = hit[0].point.clone();
-        targetPos.y = 0;
-      }
+      if (hit.length) { targetPos = hit[0].point.clone(); targetPos.y = 0; }
     });
   }
-}             
+} // <-- important: close spawnPlayer
 
-/* movement / camera update code – unchanged */
+function updateLocal(dt) {
+  if (!myId || !targetPos) return;
+  const me = players.get(myId);
+  if (!me) return;
+  const dir = new THREE.Vector3().subVectors(targetPos, me.position);
+  const d = dir.length();
+  if (d > 0.02) {
+    dir.normalize();
+    me.position.addScaledVector(dir, 3.0 * dt);
+    me.rotation.y = Math.atan2(dir.x, dir.z);
+    socket.emit('move', { x: me.position.x, y: me.position.y, z: me.position.z });
+  }
+}
 
-// --------------------------------------------------------------------------
-// CHARACTER-CREATION PREVIEW
-let pScene,pCamera,pRenderer,pRoot,pModel;
-let isDragging=false,lastX=0,selectedColor='#4ADE80';
+// Smooth chase camera
+function updateCamera(dt) {
+  if (!myId) return;
+  const me = players.get(myId);
+  if (!me) return;
+
+  const desired = me.position.clone().add(cameraOffset);
+  const smooth = 1 - Math.pow(0.0001, dt);  // ≈0.12 at 60fps
+  camera.position.lerp(desired, smooth);
+  camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
+}
+
+// resize
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ----------------- Character Creation: Preview Scene -----------------
+let pScene, pCamera, pRenderer, pRoot, pModel;
+let isDragging = false, lastX = 0;
+let selectedColor = '#4ADE80';
 
 function initPreview() {
-  pScene  = new THREE.Scene();
+  pScene = new THREE.Scene();
+  pScene.background = null;
 
-  pCamera = new THREE.PerspectiveCamera(40,1,0.1,50);
-  pCamera.position.set(0,1.6,4);
+  pCamera = new THREE.PerspectiveCamera(40, 1, 0.1, 50);
+  pCamera.position.set(0, 1.6, 4);
 
-  pRenderer = new THREE.WebGLRenderer({ antialias:true, alpha:true });
-  pRenderer.outputColorSpace    = THREE.SRGBColorSpace;
-  pRenderer.toneMapping         = THREE.ACESFilmicToneMapping;
-  pRenderer.toneMappingExposure = 1.1;
-  pRenderer.setPixelRatio(Math.min(2, devicePixelRatio||1));
+  pRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  pRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  pRenderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   previewWrap.appendChild(pRenderer.domElement);
 
-  pScene.add(new THREE.AmbientLight(0xffffff, 0.35));
-  const key = new THREE.DirectionalLight(0xffffff,1); key.position.set(3,4,5); pScene.add(key);
-  const rim2= new THREE.DirectionalLight(0xffffff,.6); rim2.position.set(-3,3,-3); pScene.add(rim2);
+  const amb = new THREE.AmbientLight(0xffffff, 0.35); pScene.add(amb);
+  const key = new THREE.DirectionalLight(0xffffff, 1.0); key.position.set(3, 4, 5); pScene.add(key);
+  const rim = new THREE.DirectionalLight(0xffffff, 0.6); rim.position.set(-3, 3, -3); pScene.add(rim);
 
-  pRoot = new THREE.Group(); pScene.add(pRoot);
+  pRoot = new THREE.Group();
+  pScene.add(pRoot);
 
   const fbxLoader = new FBXLoader();
-  fbxLoader.load('/models/player.fbx', fbx=>{
-    const box  = new THREE.Box3().setFromObject(fbx);
+  fbxLoader.load('/models/player.fbx', (fbx) => {
+    const box = new THREE.Box3().setFromObject(fbx);
     const size = new THREE.Vector3(); box.getSize(size);
-    fbx.scale.setScalar(1.7/Math.max(size.y||.001,.001));
-    fbx.traverse(c=>{ if(c.isMesh){c.castShadow=c.receiveShadow=true;}});
-    pModel = fbx; pRoot.add(fbx);
-    applyColor(pModel, selectedColor);
+    const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+    fbx.scale.setScalar(s);
+
+    fbx.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+    pModel = fbx;
+    pRoot.add(pModel);
+
+    applyColor(pModel, selectedColor, { forceFlat: true });
     framePreview(pRoot);
-  }, undefined, ()=>{
-    pModel = new THREE.Mesh(new THREE.BoxGeometry(.6,1,.6),
-      new THREE.MeshStandardMaterial({color:selectedColor}));
-    pRoot.add(pModel); framePreview(pRoot);
+  }, undefined, () => {
+    const g = new THREE.BoxGeometry(0.6, 1, 0.6);
+    const m = new THREE.MeshStandardMaterial({ color: selectedColor });
+    pModel = new THREE.Mesh(g, m);
+    pRoot.add(pModel);
+    framePreview(pRoot);
   });
 
   // rotate by dragging
@@ -391,9 +376,8 @@ function disposePreview() {
 
 function updatePreviewColor(hex) {
   selectedColor = hex;
-  if (pModel) applyColor(pModel, hex); 
+  if (pModel) applyColor(pModel, hex, { forceFlat: true });
 }
-
 
 // ----------------- UI: Color Wheel + Name -----------------
 const palette = ['#4ADE80','#60A5FA','#F472B6','#FBBF24','#34D399','#A78BFA','#F87171','#F59E0B'];
@@ -461,8 +445,8 @@ function showCharCreator(idToken = null) {
     const infoRow = document.createElement('div');
     infoRow.className = 'profileRow';
     infoRow.innerHTML =
-      `<img src="${picture}" style="width:32px;height:32px;border-radius:50%;margin-right:8px">
-       <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>`;
+      <img src="${picture}" style="width:32px;height:32px;border-radius:50%;margin-right:8px">
+       <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>;
     overlay.querySelector('.subtitle').after(infoRow);
   }
 

@@ -449,7 +449,7 @@ function showCharCreator(idToken = null) {
       <span style="color:#94a3b8;font-size:14px;">Logged in as <b>${name}</b></span>;
     overlay.querySelector('.subtitle').after(infoRow);
   }
-
+}
 
 
   // Register only after “Start”

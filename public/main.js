@@ -469,8 +469,6 @@ function showCharCreator(idToken = null) {
       socket.emit('registerGuest', { name: displayName, color: selectedColor });
     }
   };
-}   // <— *this* brace finishes showCharCreator
-
 function addLogout () {
   const btn = document.createElement('button');
   btn.textContent = 'Logout';

@@ -70,14 +70,26 @@ floor.rotation.x = -Math.PI / 2;
 floor.receiveShadow = true;
 scene.add(floor);
 
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2233 });
+// ---------- room ----------  ✅ fixed
+const wallMat = new THREE.MeshStandardMaterial({color: 0x1e2233});
 const H = 4, T = 0.4, L = 28;
-function wall() { return new THREE.Mesh(new THREE.BoxGeometry(L,H,T), wallMat); }
-scene.add(wall().position.set(0, H/2, -L/2));
-scene.add(wall().position.set(0, H/2,  L/2));
-scene.add(wall().geometry.clone().rotateY(Math.PI/2),
-          wall().position.set(-L/2, H/2, 0));
-scene.add(wall().position.set( L/2, H/2, 0));
+
+function wall(w, h, t) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), wallMat);
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+const back  = wall(L, H, T);  back.position.set(0, H / 2, -L / 2);
+const front = wall(L, H, T);  front.position.set(0, H / 2,  L / 2);
+
+const left  = wall(T, H, L);  left.position.set(-L / 2, H / 2, 0);
+const right = wall(T, H, L);  right.position.set( L / 2, H / 2, 0);
+left.rotation.y  = Math.PI / 2;
+right.rotation.y = Math.PI / 2;
+
+scene.add(back, front, left, right);
+
 
 // --------------------------------------------------------------------------
 // FBX loader + player store
@@ -85,6 +97,9 @@ const loader  = new FBXLoader();
 const players = new Map();      // id -> THREE.Group
 let myId      = null;
 let targetPos = null;
+const activeBubbles = [];   
+const raycaster = new THREE.Raycaster();   // reusable ray-picker
+const mouse     = new THREE.Vector2();     // scratch vector
 
 // tint helper – keeps normal/roughness maps so shading survives
 function tintMaterial(orig, tint) {
@@ -194,6 +209,36 @@ function showChatBubble(id, text) {
   root.userData.chatBubble = bubble;
   activeBubbles.push({ sprite: bubble, root, ttl: 4.5 }); // seconds
 }
+/* -------------------------------------------------
+   SIMPLE LOCAL MOVEMENT  (unchanged from the first tutorial)
+--------------------------------------------------*/
+const cameraOffset = new THREE.Vector3(0, 6, 10);
+
+function updateLocal(dt) {
+  if (!myId || !targetPos) return;
+  const me = players.get(myId);
+  if (!me) return;
+
+  const dir = new THREE.Vector3().subVectors(targetPos, me.position);
+  const d   = dir.length();
+  if (d > 0.02) {
+    dir.normalize();
+    me.position.addScaledVector(dir, 3.0 * dt);  // 3 m/s walk speed
+    me.rotation.y = Math.atan2(dir.x, dir.z);
+    socket.emit('move', { x: me.position.x, y: me.position.y, z: me.position.z });     // sync to server
+  }
+}
+
+function updateCamera(dt) {
+  if (!myId) return;
+  const me = players.get(myId);   if (!me) return;
+
+  const desired = me.position.clone().add(cameraOffset);
+  const lerpAmt = 1 - Math.pow(0.0001, dt);     // smooth ~0.12 @60 fps
+  camera.position.lerp(desired, lerpAmt);
+  camera.lookAt(me.position.x, me.position.y + 1.2, me.position.z);
+}
+
 
 // ---- Spawn & movement ----
 function spawnPlayer(id, pos, name, color, isLocal=false) {
@@ -222,21 +267,26 @@ function spawnPlayer(id, pos, name, color, isLocal=false) {
   if (name) root.add(makeNameTag(name));
 
   if (isLocal) {
-    camera.position.copy(root.position).add(new THREE.Vector3(0,6,10));
-    camera.lookAt(root.position.x, root.position.y+1.2, root.position.z);
+    camera.position.copy(root.position).add(new THREE.Vector3(0, 6, 10));
+    camera.lookAt(root.position.x, root.position.y + 1.2, root.position.z);
 
-    addEventListener('click', e=>{
+    addEventListener('click', e => {
       if (isTypingInChat(e)) return;
-      const mouse = new THREE.Vector2(
-        (e.clientX / innerWidth)*2-1,
-        -(e.clientY / innerHeight)*2+1
+
+      mouse.set(
+        (e.clientX / innerWidth)  * 2 - 1,
+       -(e.clientY / innerHeight) * 2 + 1
       );
-      (new THREE.Raycaster()).setFromCamera(mouse, camera);
-      const hit = (new THREE.Raycaster()).intersectObjects([floor]);
-      if (hit.length) { targetPos = hit[0].point.clone(); targetPos.y = 0; }
+      raycaster.setFromCamera(mouse, camera);
+
+      const hit = raycaster.intersectObjects([floor], false);
+      if (hit.length) {
+        targetPos = hit[0].point.clone();
+        targetPos.y = 0;
+      }
     });
   }
-}
+}             
 
 /* movement / camera update code – unchanged */
 

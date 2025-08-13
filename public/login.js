@@ -3,9 +3,11 @@ export function initLoginGate({ onGuest, onGoogle }) {
   const loginGate = document.getElementById('loginGate');
   const guestBtn  = document.getElementById('guestBtn');
   const loginMsg  = document.getElementById('loginMsg');
+  let gateDismissed = false;
 
   guestBtn.onclick = () => {
     // Hide the welcome gate when playing as guest
+    gateDismissed = true;
     loginGate.style.display = 'none';
     onGuest();
   };
@@ -17,6 +19,7 @@ export function initLoginGate({ onGuest, onGoogle }) {
     auto_select : true,          // <── keeps them signed-in
     callback  : (resp) => {
       console.log('got token', resp.credential);
+      gateDismissed = true;
       loginGate.style.display = 'none';        // hide gate instantly
       onGoogle(resp.credential);
     }
@@ -24,13 +27,17 @@ export function initLoginGate({ onGuest, onGoogle }) {
 
   // Ask GIS whether it can auto-sign-in.  If not, we’ll render buttons below.
   google.accounts.id.prompt((notification) => {
-    if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+    if (
+      !gateDismissed &&
+      (notification.isNotDisplayed() || notification.isSkippedMoment())
+    ) {
       // Auto-sign-in failed ➜ show the gate with our buttons
       renderButtons();
     }
   });
 
   function renderButtons() {
+    if (gateDismissed) return;
     loginGate.style.display = 'flex';          // gate is hidden by default
     google.accounts.id.renderButton(
       document.getElementById('gSignIn'),

@@ -325,11 +325,13 @@ function showChatBubble(id, text) {
   const list = root.userData.chatBubbles || [];
   const bubble = makeChatBubble(text);
   root.add(bubble);
-  list.push(bubble);
+  // Insert newest bubble at start so older ones are pushed upward
+  list.unshift(bubble);
   root.userData.chatBubbles = list;
 
+  // Limit to 3 bubbles, removing the oldest (last in the array)
   if (list.length > 3) {
-    const old = list.shift();
+    const old = list.pop();
     if (old) {
       root.remove(old);
       const idx = activeBubbles.findIndex((b) => b.sprite === old);

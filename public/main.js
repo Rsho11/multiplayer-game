@@ -207,7 +207,7 @@ function makeNameTag(text) {
 // Chat bubbles ------------------------------------------------------------
 function makeChatBubble(text) {
   const ctx = document.createElement('canvas').getContext('2d');
-  const maxWidth = 260;
+  const maxWidth = 360;
   ctx.font = '600 28px system-ui, sans-serif';
 
   // -- Simple word-wrap ---------------------------------------------------
@@ -275,13 +275,16 @@ function makeChatBubble(text) {
   return sprite;
 }
 
+const BUBBLE_BASE = 2.8;
+const BUBBLE_SPACING = 0.5;
+
 function showChatBubble(id, text) {
   const root = players.get(id);
   if (!root) return;
 
   const list = root.userData.chatBubbles || [];
   const bubble = makeChatBubble(text);
-  bubble.position.set(0, 2.6 + list.length * 0.35, 0);
+  bubble.position.set(0, BUBBLE_BASE + list.length * BUBBLE_SPACING, 0);
   root.add(bubble);
   list.push(bubble);
   root.userData.chatBubbles = list;
@@ -293,11 +296,12 @@ function showChatBubble(id, text) {
       const idx = activeBubbles.findIndex((b) => b.sprite === old);
       if (idx >= 0) activeBubbles.splice(idx, 1);
     }
-    list.forEach((b, i) => b.position.set(0, 2.6 + i * 0.35, 0));
+    list.forEach((b, i) => b.position.set(0, BUBBLE_BASE + i * BUBBLE_SPACING, 0));
   }
 
   if (root.userData.typingBubble) {
-    root.userData.typingBubble.position.y = 2.6 + list.length * 0.35;
+    root.userData.typingBubble.position.y =
+      BUBBLE_BASE + list.length * BUBBLE_SPACING;
   }
 
   activeBubbles.push({ sprite: bubble, root, ttl: 4.5 });
@@ -310,7 +314,14 @@ function showTyping(id, flag) {
     if (root.userData.typingBubble) return;
     const bubble = makeChatBubble('...');
     bubble.scale.multiplyScalar(0.6);
-    bubble.position.set(0, 2.6 + (root.userData.chatBubbles ? root.userData.chatBubbles.length * 0.35 : 0), 0);
+    bubble.position.set(
+      0,
+      BUBBLE_BASE +
+        (root.userData.chatBubbles
+          ? root.userData.chatBubbles.length * BUBBLE_SPACING
+          : 0),
+      0
+    );
     root.add(bubble);
     root.userData.typingBubble = bubble;
   } else {
@@ -738,11 +749,9 @@ socket.on('connect', () => {
 
   initLoginGate({
     onGuest() {
-      document.getElementById('loginGate').style.display = 'none';
       showCharCreator();
     },
     onGoogle(idToken) {
-      document.getElementById('loginGate').style.display = 'none';
       showCharCreator(idToken);
     },
   });
@@ -750,6 +759,9 @@ socket.on('connect', () => {
 
 // Character creator entry point ------------------------------------------
 function showCharCreator(idToken = null) {
+  // Guests don't see the friends tab
+  friendsBtn.style.display = idToken ? '' : 'none';
+  friendsPanel.style.display = idToken ? '' : 'none';
   overlay.classList.remove('hidden');
   initPreview();
   updatePreviewColor(palette[selectedIdx]);

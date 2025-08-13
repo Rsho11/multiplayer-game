@@ -32,6 +32,7 @@ const friendsBtn   = document.getElementById('friendsBtn');
 const historyPanel = document.getElementById('historyPanel');
 const friendsPanel = document.getElementById('friendsPanel');
 const friendsList  = document.getElementById('friendsList');
+const logoutBtn    = document.getElementById('logoutBtn');
 
 const socket = window.io();
 
@@ -112,9 +113,31 @@ let chatTarget = null; // current private chat target
 const chatHistory = [];
 const friends = new Map();
 
-const bgAudio = new Audio('https://cdn.pixabay.com/download/audio/2023/03/26/audio_b1bff9e603.mp3?filename=ambient-14538.mp3');
-bgAudio.loop = true;
-bgAudio.volume = 0.4;
+let audioCtx = null;
+function playAmbientSound() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 2, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * 0.25;
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 600;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.3;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    src.start();
+  } else if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+}
 
 let typing = false;
 let typingTimer = null;
@@ -276,7 +299,24 @@ function makeChatBubble(text) {
 }
 
 const BUBBLE_BASE = 2.8;
-const BUBBLE_SPACING = 0.5;
+const BUBBLE_GAP = 0.3;
+
+function layoutBubbles(root) {
+  const list = root.userData.chatBubbles || [];
+  let y = BUBBLE_BASE;
+  for (const b of list) {
+    const half = b.scale.y / 2;
+    y += half;
+    b.position.y = y;
+    y += half + BUBBLE_GAP;
+  }
+  if (root.userData.typingBubble) {
+    const tb = root.userData.typingBubble;
+    const half = tb.scale.y / 2;
+    y += half;
+    tb.position.y = y;
+  }
+}
 
 function showChatBubble(id, text) {
   const root = players.get(id);
@@ -284,7 +324,6 @@ function showChatBubble(id, text) {
 
   const list = root.userData.chatBubbles || [];
   const bubble = makeChatBubble(text);
-  bubble.position.set(0, BUBBLE_BASE + list.length * BUBBLE_SPACING, 0);
   root.add(bubble);
   list.push(bubble);
   root.userData.chatBubbles = list;
@@ -296,14 +335,9 @@ function showChatBubble(id, text) {
       const idx = activeBubbles.findIndex((b) => b.sprite === old);
       if (idx >= 0) activeBubbles.splice(idx, 1);
     }
-    list.forEach((b, i) => b.position.set(0, BUBBLE_BASE + i * BUBBLE_SPACING, 0));
   }
 
-  if (root.userData.typingBubble) {
-    root.userData.typingBubble.position.y =
-      BUBBLE_BASE + list.length * BUBBLE_SPACING;
-  }
-
+  layoutBubbles(root);
   activeBubbles.push({ sprite: bubble, root, ttl: 4.5 });
 }
 
@@ -314,21 +348,15 @@ function showTyping(id, flag) {
     if (root.userData.typingBubble) return;
     const bubble = makeChatBubble('...');
     bubble.scale.multiplyScalar(0.6);
-    bubble.position.set(
-      0,
-      BUBBLE_BASE +
-        (root.userData.chatBubbles
-          ? root.userData.chatBubbles.length * BUBBLE_SPACING
-          : 0),
-      0
-    );
     root.add(bubble);
     root.userData.typingBubble = bubble;
+    layoutBubbles(root);
   } else {
     const b = root.userData.typingBubble;
     if (b) {
       root.remove(b);
       delete root.userData.typingBubble;
+      layoutBubbles(root);
     }
   }
 }
@@ -785,7 +813,7 @@ function showCharCreator(idToken = null) {
     overlay.classList.add('hidden');
     disposePreview();
     chatBar.classList.remove('hidden');
-    bgAudio.play().catch(() => {});
+    playAmbientSound();
     setTimeout(() => chatInput.focus(), 50);
 
     if (idToken) {
@@ -794,29 +822,20 @@ function showCharCreator(idToken = null) {
         name: displayName,
         color: selectedColor,
       });
-      addLogout(); // red “Logout” button
+      logoutBtn.style.display = '';
     } else {
       socket.emit('registerGuest', {
         name: displayName,
         color: selectedColor,
       });
+      logoutBtn.style.display = 'none';
     }
   };
 } // <-- correct end of showCharCreator()
-
-function addLogout() {
-  const btn = document.createElement('button');
-  btn.textContent = 'Logout';
-  btn.style.cssText =
-    'position:fixed;right:16px;bottom:16px;padding:10px 18px;' +
-    'background:#dc2626;color:#fff;border:0;border-radius:12px;cursor:pointer;z-index:9;';
-  document.body.appendChild(btn);
-
-  btn.onclick = () => {
-    google.accounts.id.disableAutoSelect();
-    location.reload();
-  };
-}
+logoutBtn.onclick = () => {
+  google.accounts.id.disableAutoSelect();
+  location.reload();
+};
 
 // ------------------------------------------------------------------------
 // Server events -----------------------------------------------------------
@@ -884,7 +903,15 @@ function loop(now) {
       ); // fade last 0.5s
     }
     if (b.ttl <= -0.5) {
-      if (b.root) b.root.remove(b.sprite);
+      if (b.root) {
+        b.root.remove(b.sprite);
+        const list = b.root.userData.chatBubbles;
+        if (list) {
+          const idx = list.indexOf(b.sprite);
+          if (idx >= 0) list.splice(idx, 1);
+        }
+        layoutBubbles(b.root);
+      }
       activeBubbles.splice(i, 1);
     }
   }

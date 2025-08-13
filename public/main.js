@@ -27,6 +27,13 @@ const previewWrap = document.getElementById('previewWrap');
 const chatBar   = document.getElementById('chatBar');
 const chatInput = document.getElementById('chatInput');
 const chatSend  = document.getElementById('chatSend');
+const historyBtn   = document.getElementById('historyBtn');
+const friendsBtn   = document.getElementById('friendsBtn');
+const historyPanel = document.getElementById('historyPanel');
+const friendsPanel = document.getElementById('friendsPanel');
+const friendsList  = document.getElementById('friendsList');
+friendsBtn.style.display = 'none';
+friendsPanel.style.display = 'none';
 
 const socket = window.io();
 
@@ -103,6 +110,17 @@ const loader = new FBXLoader();
 const players = new Map(); // id -> Group
 let myId = null;
 let targetPos = null;
+let chatTarget = null; // current private chat target
+const chatHistory = [];
+const friends = new Map();
+let isGoogleUser = false;
+
+const bgAudio = new Audio('https://cdn.pixabay.com/download/audio/2023/03/26/audio_b1bff9e603.mp3?filename=ambient-14538.mp3');
+bgAudio.loop = true;
+bgAudio.volume = 0.4;
+
+let typing = false;
+let typingTimer = null;
 
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -110,6 +128,7 @@ const cameraOffset = new THREE.Vector3(0, 6, 10);
 
 // -- Chat bubble state ----------------------------------------------------
 const activeBubbles = [];
+const BUBBLE_GAP = 0.5;
 
 // -- Materials / tint helpers --------------------------------------------
 function tintMaterial(m, color) {
@@ -192,7 +211,7 @@ function makeNameTag(text) {
 // Chat bubbles ------------------------------------------------------------
 function makeChatBubble(text) {
   const ctx = document.createElement('canvas').getContext('2d');
-  const maxWidth = 260;
+  const maxWidth = 360;
   ctx.font = '600 28px system-ui, sans-serif';
 
   // -- Simple word-wrap ---------------------------------------------------
@@ -256,7 +275,6 @@ function makeChatBubble(text) {
   });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(w / 110, h / 110, 1);
-  sprite.position.set(0, 2.6, 0); // above name tag
 
   return sprite;
 }
@@ -265,13 +283,60 @@ function showChatBubble(id, text) {
   const root = players.get(id);
   if (!root) return;
 
-  if (root.userData.chatBubble) root.remove(root.userData.chatBubble);
-
+  const list = root.userData.chatBubbles || [];
   const bubble = makeChatBubble(text);
+  bubble.position.set(0, 2.6 + list.length * BUBBLE_GAP, 0);
   root.add(bubble);
-  root.userData.chatBubble = bubble;
+  list.push(bubble);
+  root.userData.chatBubbles = list;
 
-  activeBubbles.push({ sprite: bubble, root, ttl: 4.5 }); // seconds
+  if (list.length > 3) {
+    const old = list.shift();
+    if (old) {
+      root.remove(old);
+      const idx = activeBubbles.findIndex((b) => b.sprite === old);
+      if (idx >= 0) activeBubbles.splice(idx, 1);
+    }
+    list.forEach((b, i) => b.position.set(0, 2.6 + i * BUBBLE_GAP, 0));
+  }
+
+  if (root.userData.typingBubble) {
+    root.userData.typingBubble.position.y = 2.6 + list.length * BUBBLE_GAP;
+  }
+
+  activeBubbles.push({ sprite: bubble, root, ttl: 4.5 });
+}
+
+function showTyping(id, flag) {
+  const root = players.get(id);
+  if (!root) return;
+  if (flag) {
+    if (root.userData.typingBubble) return;
+    const bubble = makeChatBubble('...');
+    bubble.scale.multiplyScalar(0.6);
+    bubble.position.set(
+      0,
+      2.6 + (root.userData.chatBubbles ? root.userData.chatBubbles.length * BUBBLE_GAP : 0),
+      0
+    );
+    root.add(bubble);
+    root.userData.typingBubble = bubble;
+  } else {
+    const b = root.userData.typingBubble;
+    if (b) {
+      root.remove(b);
+      delete root.userData.typingBubble;
+    }
+  }
+}
+
+function addHistory(id, text, isPrivate = false) {
+  const name = players.get(id)?.userData?.name || 'Player';
+  const row = document.createElement('div');
+  row.textContent = `${isPrivate ? '(PM) ' : ''}${name}: ${text}`;
+  historyPanel.appendChild(row);
+  historyPanel.scrollTop = historyPanel.scrollHeight;
+  chatHistory.push({ id, text, isPrivate });
 }
 
 // ------------------------------------------------------------------------
@@ -280,6 +345,9 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
   const root = new THREE.Group();
   root.position.set(pos.x, pos.y, pos.z);
   scene.add(root);
+  root.userData.id = id;
+  root.userData.name = name;
+  root.userData.isGuest = pos.isGuest;
   players.set(id, root);
 
   // Model
@@ -300,6 +368,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
         if (c.isMesh) {
           c.castShadow = true;
           c.receiveShadow = true;
+          c.userData.playerId = id;
         }
       });
 
@@ -313,6 +382,7 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
       const m = new THREE.MeshStandardMaterial({ color: color || '#4ADE80' });
       const mesh = new THREE.Mesh(g, m);
       mesh.castShadow = true;
+      mesh.userData.playerId = id;
       root.add(mesh);
     }
   );
@@ -333,6 +403,18 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
+
+      const objs = Array.from(players.values());
+      const phit = raycaster.intersectObjects(objs, true);
+      if (phit.length) {
+        let o = phit[0].object;
+        while (o && !o.userData.playerId) o = o.parent;
+        if (o && o.userData.playerId && o.userData.playerId !== myId) {
+          sendFriendRequest(o.userData.playerId);
+          return;
+        }
+      }
+
       const hit = raycaster.intersectObjects([floor], false);
 
       if (hit.length) {
@@ -584,8 +666,16 @@ function sendChat() {
   const text = (chatInput.value || '').trim();
   if (!text) return;
 
-  socket.emit('chat', text);
+  if (chatTarget) {
+    socket.emit('privateChat', { to: chatTarget, text });
+  } else {
+    socket.emit('chat', text);
+  }
   chatInput.value = '';
+  if (typing) {
+    typing = false;
+    socket.emit('typing', false);
+  }
 }
 chatSend.addEventListener('click', sendChat);
 chatInput.addEventListener('keydown', (e) => {
@@ -594,6 +684,70 @@ chatInput.addEventListener('keydown', (e) => {
     sendChat();
   }
 });
+
+chatInput.addEventListener('input', () => {
+  if (!typing) {
+    typing = true;
+    socket.emit('typing', true);
+  }
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    if (typing) {
+      typing = false;
+      socket.emit('typing', false);
+    }
+  }, 1000);
+});
+chatInput.addEventListener('blur', () => {
+  if (typing) {
+    typing = false;
+    socket.emit('typing', false);
+  }
+});
+
+historyBtn.onclick = () => historyPanel.classList.toggle('open');
+friendsBtn.onclick = () => friendsPanel.classList.toggle('open');
+
+function refreshFriendsList() {
+  friendsList.innerHTML = '';
+  const global = document.createElement('div');
+  global.textContent = 'Global Chat';
+  global.onclick = () => {
+    chatTarget = null;
+    chatInput.placeholder = 'Type a message…';
+    friendsPanel.classList.remove('open');
+  };
+  friendsList.appendChild(global);
+  friends.forEach((name, id) => {
+    const div = document.createElement('div');
+    div.textContent = name;
+    div.onclick = () => {
+      chatTarget = id;
+      chatInput.placeholder = `Message ${name}`;
+      friendsPanel.classList.remove('open');
+    };
+    friendsList.appendChild(div);
+  });
+}
+
+function sendFriendRequest(id) {
+  if (!isGoogleUser) {
+    alert('Google login required to add friends.');
+    return;
+  }
+  const info = players.get(id);
+  if (info?.userData?.isGuest) {
+    alert('Guests cannot be added as friends.');
+    return;
+  }
+  if (friends.has(id)) return;
+  const name = info?.userData?.name || 'Player';
+  if (confirm(`Add ${name} as friend?`)) {
+    socket.emit('friendRequest', { to: id });
+  }
+}
+
+refreshFriendsList();
 
 // ------------------------------------------------------------------------
 // Socket.io ----------------------------------------------------------------
@@ -617,6 +771,9 @@ function showCharCreator(idToken = null) {
   overlay.classList.remove('hidden');
   initPreview();
   updatePreviewColor(palette[selectedIdx]);
+  isGoogleUser = !!idToken;
+  friendsBtn.style.display = isGoogleUser ? 'block' : 'none';
+  friendsPanel.style.display = isGoogleUser ? 'block' : 'none';
 
   // -- Logged-in banner ---------------------------------------------------
   if (idToken) {
@@ -637,6 +794,7 @@ function showCharCreator(idToken = null) {
     overlay.classList.add('hidden');
     disposePreview();
     chatBar.classList.remove('hidden');
+    bgAudio.play().catch(() => {});
     setTimeout(() => chatInput.focus(), 50);
 
     if (idToken) {
@@ -694,7 +852,24 @@ socket.on('removePlayer', (id) => {
 });
 
 // NEW: receive chat messages -> show bubbles
-socket.on('chat', ({ id, text }) => showChatBubble(id, text));
+socket.on('chat', ({ id, text }) => {
+  showChatBubble(id, text);
+  addHistory(id, text);
+});
+socket.on('privateChat', ({ id, text }) => {
+  showChatBubble(id, text);
+  addHistory(id, text, true);
+});
+socket.on('typing', ({ id, typing }) => showTyping(id, typing));
+socket.on('friendRequest', ({ from, name }) => {
+  if (confirm(`${name} wants to be your friend. Accept?`)) {
+    socket.emit('friendAccept', { from });
+  }
+});
+socket.on('friendAccepted', ({ id, name }) => {
+  friends.set(id, name);
+  refreshFriendsList();
+});
 
 // ------------------------------------------------------------------------
 // Main loop ---------------------------------------------------------------

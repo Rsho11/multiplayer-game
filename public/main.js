@@ -114,6 +114,7 @@ const chatHistory = [];
 const friends = new Map();
 
 let audioCtx = null;
+let clickInterval = null;
 function playAmbientSound() {
   if (!audioCtx) {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -134,6 +135,26 @@ function playAmbientSound() {
     filter.connect(gain);
     gain.connect(audioCtx.destination);
     src.start();
+
+    // add random clicks for a mysterious vibe
+    if (!clickInterval) {
+      clickInterval = setInterval(() => {
+        if (!audioCtx || audioCtx.state !== 'running') return;
+        if (Math.random() < 0.3) {
+          const t = audioCtx.currentTime;
+          const osc = audioCtx.createOscillator();
+          osc.type = 'square';
+          osc.frequency.value = 200 + Math.random() * 800;
+          const g = audioCtx.createGain();
+          g.gain.setValueAtTime(0.2, t);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+          osc.connect(g);
+          g.connect(audioCtx.destination);
+          osc.start(t);
+          osc.stop(t + 0.05);
+        }
+      }, 1000);
+    }
   } else if (audioCtx.state === 'suspended') {
     audioCtx.resume();
   }
@@ -294,7 +315,7 @@ function makeChatBubble(text) {
 }
 
 const BUBBLE_BASE = 2.8;
-const BUBBLE_GAP = 0.3;
+const BUBBLE_GAP = 0.15;
 
 function layoutBubbles(root) {
   const list = root.userData.chatBubbles || [];
@@ -335,7 +356,8 @@ function showChatBubble(id, text) {
   }
 
   layoutBubbles(root);
-  activeBubbles.push({ sprite: bubble, root, ttl: 4.5 });
+  const ttl = 2 + text.length * 0.05; // allow longer time for longer text
+  activeBubbles.push({ sprite: bubble, root, ttl });
 }
 
 function showTyping(id, flag) {

@@ -73,35 +73,21 @@ dir.castShadow = true;
 scene.add(dir);
 
 // Room -------------------------------------------------------------------
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x2a2f45, roughness: 0.9 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.receiveShadow = true;
-floor.name = 'floor';
-scene.add(floor);
-
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e2233 });
-const H = 4,
-  T = 0.4,
-  L = 28;
-
-const w1 = new THREE.Mesh(new THREE.BoxGeometry(L, H, T), wallMat);
-w1.position.set(0, H / 2, -L / 2);
-scene.add(w1);
-
-const w2 = w1.clone();
-w2.position.set(0, H / 2, L / 2);
-scene.add(w2);
-
-const w3 = new THREE.Mesh(new THREE.BoxGeometry(T, H, L), wallMat);
-w3.position.set(-L / 2, H / 2, 0);
-scene.add(w3);
-
-const w4 = w3.clone();
-w4.position.set(L / 2, H / 2, 0);
-scene.add(w4);
+let floor = null;
+const envLoader = new FBXLoader();
+envLoader.load('/models/WaitingRoom.fbx', (fbx) => {
+  fbx.traverse((c) => {
+    if (c.isMesh) {
+      c.castShadow = true;
+      c.receiveShadow = true;
+      if (!floor && c.name && c.name.toLowerCase().includes('floor')) {
+        floor = c;
+      }
+    }
+  });
+  if (!floor) floor = fbx;
+  scene.add(fbx);
+});
 
 // ------------------------------------------------------------------------
 // Helpers & state
@@ -464,11 +450,12 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
         }
       }
 
-      const hit = raycaster.intersectObjects([floor], false);
-
-      if (hit.length) {
-        targetPos = hit[0].point.clone();
-        targetPos.y = 0;
+      if (floor) {
+        const hit = raycaster.intersectObject(floor, true);
+        if (hit.length) {
+          targetPos = hit[0].point.clone();
+          targetPos.y = 0;
+        }
       }
     });
   }

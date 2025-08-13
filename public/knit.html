@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Knit ‘n’ Untangle — a tiny knitting puzzle</title>
+  <style>
+    :root{
+      --bg:#0f1221;                /* deep midnight */
+      --panel:#171b34;             /* card bg */
+      --ink:#e6e8ff;               /* primary text */
+      --muted:#aab0d6;             /* secondary text */
+      --accent:#b48efc;            /* lilac yarn */
+      --accent-2:#64d6c2;          /* mint */
+      --edge-ok:#6bd3ff;           /* untangled edge */
+      --edge-bad:#ff6b8b;          /* crossing edge */
+      --gold:#ffe27a;              /* win sparkle */
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; color:var(--ink); font:16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      background:
+        /* subtle knit pattern */
+        radial-gradient( circle at 25% 25%, rgba(255,255,255,.06), transparent 40%),
+        radial-gradient( circle at 75% 75%, rgba(255,255,255,.06), transparent 40%),
+        repeating-linear-gradient(45deg, rgba(255,255,255,.03) 0 10px, transparent 10px 20px),
+        var(--bg);
+      display:flex; flex-direction:column; align-items:center; gap:16px; padding:18px;
+    }
+
+    header{width: min(1100px, 100%); display:grid; grid-template-columns: 1fr auto; gap:16px; align-items:center}
+    h1{margin:0; font-size:clamp(20px, 4vw, 34px); letter-spacing:.5px}
+    .tagline{color:var(--muted); font-size:.95rem}
+
+    .panel{width:min(1100px, 100%); background:linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.02));
+      border:1px solid rgba(255,255,255,.08); border-radius:18px; box-shadow:var(--shadow); overflow:hidden}
+
+    .topbar{display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between; padding:12px 14px; background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border-bottom:1px solid rgba(255,255,255,.08)}
+
+    .stats{display:flex; gap:14px; align-items:center; flex-wrap:wrap}
+    .stat{display:flex; gap:8px; align-items:center; background:rgba(255,255,255,.04); padding:8px 10px; border-radius:12px; border:1px solid rgba(255,255,255,.08)}
+    .dot{width:10px; height:10px; border-radius:50%}
+
+    .controls{display:flex; gap:8px; flex-wrap:wrap}
+    button{appearance:none; border:none; padding:10px 14px; border-radius:12px; font-weight:600; color:#0b0e16;
+      background:linear-gradient(180deg, #fff, #e9e9ff); cursor:pointer; box-shadow: 0 2px 0 rgba(0,0,0,.15)}
+    button:hover{filter:brightness(1.03)}
+    button.secondary{background:transparent; color:var(--ink); border:1px solid rgba(255,255,255,.14)}
+
+    .wrap{position:relative;}
+    canvas{display:block; width:100%; height:auto; background:
+      radial-gradient( 1200px 700px at 0% 0%, rgba(180,142,252,.13), transparent 55%),
+      radial-gradient( 1000px 600px at 100% 100%, rgba(100,214,194,.12), transparent 45%),
+      var(--panel)}
+
+    .hud{position:absolute; left:12px; bottom:12px; display:flex; gap:8px; align-items:center; opacity:.9}
+    .badge{padding:6px 10px; border-radius:10px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.09); font-size:.9rem}
+
+    .toast{position:absolute; inset:0; display:none; align-items:center; justify-content:center;}
+    .toast.show{display:flex}
+    .toast .card{background:linear-gradient(180deg, rgba(255,255,255,.12), rgba(255,255,255,.06)); border:1px solid rgba(255,255,255,.2);
+      padding:22px 20px; text-align:center; border-radius:16px; backdrop-filter: blur(6px); box-shadow:var(--shadow)}
+
+    .small{font-size:.9rem; color:var(--muted)}
+    a.link{color:var(--accent)}
+
+    .legend{display:flex; gap:12px; align-items:center; flex-wrap:wrap}
+    .legend .sw{width:18px; height:10px; border-radius:3px}
+
+    details{width:min(1100px, 100%); color:var(--muted)}
+    details[open]{color:var(--ink)}
+    summary{cursor:pointer; padding:10px 6px; font-weight:600}
+    .help{padding:0 6px 10px 6px}
+    .kbd{display:inline-block; padding:.1em .4em; border-radius:6px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12)}
+
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>🧶 Knit ‘n’ Untangle</h1>
+      <div class="tagline">Drag the yarn pins so no threads cross. Clear the knots to “finish the row”.</div>
+    </div>
+    <div class="legend">
+      <span class="sw" style="background:var(--edge-bad)"></span> crossing
+      <span class="sw" style="background:var(--edge-ok)"></span> clean
+      <span class="sw" style="background:var(--accent)"></span> selected pin
+    </div>
+  </header>
+
+  <section class="panel">
+    <div class="topbar">
+      <div class="stats">
+        <div class="stat" title="Your current level">
+          <span class="dot" style="background:var(--accent)"></span>
+          <span>Level <b id="level">1</b></span>
+        </div>
+        <div class="stat" title="How many line crossings remain">
+          <span class="dot" style="background:var(--edge-bad)"></span>
+          <span>Crossings <b id="crossings">—</b></span>
+        </div>
+        <div class="stat" title="How many drags you've made">
+          <span class="dot" style="background:var(--accent-2)"></span>
+          <span>Drags <b id="moves">0</b></span>
+        </div>
+        <div class="stat" title="Elapsed time on this level">
+          <span class="dot" style="background:var(--gold)"></span>
+          <span>Time <b id="time">0:00</b></span>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="btnNew" title="Start a fresh run">New run</button>
+        <button id="btnNext" class="secondary" title="Skip to next level">Next level ▶</button>
+        <button id="btnReset" class="secondary" title="Shuffle pins for this level">Shuffle</button>
+        <button id="btnHint" class="secondary" title="Highlight a tangle">Hint</button>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <canvas id="board" width="1200" height="700" aria-label="Knit untangle board" role="img"></canvas>
+      <div class="hud">
+        <div class="badge">Tip: small, steady drags work best.</div>
+      </div>
+      <div id="toast" class="toast" aria-live="polite">
+        <div class="card">
+          <div style="font-size:24px; margin-bottom:8px">✨ Row finished! ✨</div>
+          <div class="small">All yarn is untangled — beautiful work.</div>
+          <div style="margin-top:14px; display:flex; gap:8px; justify-content:center">
+            <button id="btnCont">Next level</button>
+            <button id="btnAgain" class="secondary">Replay</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <details>
+    <summary>How to play</summary>
+    <div class="help">
+      <p>Each level is a “row” of knitting pins connected by yarn. The layout starts tangled — your job is to gently drag the pins until <b>no threads cross</b>.</p>
+      <ul>
+        <li><b>Drag</b> a pin to move it. Crossings turn from <span style="color:var(--edge-bad)">pink</span> to <span style="color:var(--edge-ok)">blue</span> as you untangle.</li>
+        <li>Tap <b>Hint</b> to highlight one knotty pair of threads.</li>
+        <li><b>Shuffle</b> keeps the same connections but randomizes positions if you want a fresh take.</li>
+        <li>Finish a row to advance. There are progressively larger rows with more pins.</li>
+      </ul>
+      <p>Keyboard: <span class="kbd">H</span> hint, <span class="kbd">R</span> shuffle, <span class="kbd">N</span> next.</p>
+    </div>
+  </details>
+
+  <script>
+  // --- Knit `n` Untangle — single-file implementation ----------------------
+  // by ChatGPT — no libraries, just canvas + pointer events
+
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const levelEl = document.getElementById('level');
+  const crossingsEl = document.getElementById('crossings');
+  const movesEl = document.getElementById('moves');
+  const timeEl = document.getElementById('time');
+  const btnNew = document.getElementById('btnNew');
+  const btnNext = document.getElementById('btnNext');
+  const btnReset = document.getElementById('btnReset');
+  const btnHint = document.getElementById('btnHint');
+  const toast = document.getElementById('toast');
+  const btnCont = document.getElementById('btnCont');
+  const btnAgain = document.getElementById('btnAgain');
+
+  // Board state
+  let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+  let W = 1200, H = 700;
+  let nodes = [];         // [{x,y}]
+  let edges = [];         // [[i,j], ...]
+  let crossingPairs = []; // [ [edgeIndexA, edgeIndexB], ... ] for hint
+  let crossingEdgeSet = new Set(); // set of edge indices currently crossing
+  let dragging = null;    // {id, offsetX, offsetY}
+  let hoverId = -1;
+  let moves = 0;
+  let level = 1;
+  let timerStart = null, rafId = 0;
+  let hintFlash = 0;      // countdown frames
+
+  const LEVEL_SIZES = [6, 8, 10, 12, 14, 16, 18, 20];
+  const NODE_R = 16;      // logical radius; scaled with DPR in draw
+  const MARGIN = 28;
+
+  // Utility: random within [min,max)
+  const rnd = (min, max) => Math.random() * (max - min) + min;
+
+  function resizeCanvas(){
+    // Fit the canvas width to the panel while honoring DPR for crispness
+    const rect = canvas.getBoundingClientRect();
+    W = Math.max(600, Math.floor(rect.width));
+    H = Math.max(380, Math.floor(rect.width * 0.58));
+    canvas.width = Math.floor(W * DPR);
+    canvas.height = Math.floor(H * DPR);
+    canvas.style.height = H + 'px';
+    canvas.style.width = W + 'px';
+    draw();
+  }
+
+  // Graph generation: planar fan triangulation on a cycle so a crossing-free
+  // embedding always exists. We then shuffle node positions to create a puzzle.
+  function generateGraph(n){
+    edges = [];
+    // cycle
+    for(let i=0;i<n;i++) edges.push([i, (i+1)%n]);
+    // fan from 0 to 2..n-2 (non-adjacent)
+    for(let j=2;j<=n-2;j++) edges.push([0, j]);
+  }
+
+  function placeNodes(n){
+    nodes = [];
+    // Start from random positions within margins
+    for(let i=0;i<n;i++){
+      nodes.push({ x: rnd(MARGIN, W-MARGIN), y: rnd(MARGIN, H-MARGIN) });
+    }
+    // Ensure it's tangled (if not, reshuffle a few times)
+    let tries = 0;
+    while(countCrossings() === 0 && tries++ < 30){
+      for(let i=0;i<n;i++){
+        nodes[i].x = rnd(MARGIN, W-MARGIN);
+        nodes[i].y = rnd(MARGIN, H-MARGIN);
+      }
+    }
+  }
+
+  // Geometric helpers --------------------------------------------------------
+  function segsIntersect(a,b,c,d){
+    // Proper intersection (excluding shared endpoints)
+    const o1 = orient(a,b,c);
+    const o2 = orient(a,b,d);
+    const o3 = orient(c,d,a);
+    const o4 = orient(c,d,b);
+    if (o1 === 0 && onSeg(a,c,b)) return false; // colinear touches -> ignore
+    if (o2 === 0 && onSeg(a,d,b)) return false;
+    if (o3 === 0 && onSeg(c,a,d)) return false;
+    if (o4 === 0 && onSeg(c,b,d)) return false;
+    return (o1 * o2 < 0) && (o3 * o4 < 0);
+  }
+  function orient(p,q,r){
+    const v = (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x);
+    return Math.sign(v);
+  }
+  function onSeg(p,q,r){
+    return Math.min(p.x,r.x) <= q.x && q.x <= Math.max(p.x,r.x) &&
+           Math.min(p.y,r.y) <= q.y && q.y <= Math.max(p.y,r.y);
+  }
+
+  function countCrossings(){
+    crossingEdgeSet.clear();
+    crossingPairs = [];
+    for(let i=0;i<edges.length;i++){
+      const [a,b] = edges[i];
+      const A = nodes[a], B = nodes[b];
+      for(let j=i+1;j<edges.length;j++){
+        const [c,d] = edges[j];
+        if (a===c || a===d || b===c || b===d) continue; // shared endpoint
+        const C = nodes[c], D = nodes[d];
+        if (segsIntersect(A,B,C,D)){
+          crossingEdgeSet.add(i); crossingEdgeSet.add(j);
+          crossingPairs.push([i,j]);
+        }
+      }
+    }
+    return crossingEdgeSet.size > 0 ? crossingPairs.length : 0;
+  }
+
+  // Draw ---------------------------------------------------------------------
+  function draw(){
+    if(!ctx) return;
+    ctx.save();
+    ctx.scale(DPR, DPR);
+    ctx.clearRect(0,0,W,H);
+
+    // soft grid reminiscent of a knit chart
+    ctx.globalAlpha = 0.15;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    const cell = 28;
+    for(let x=cell; x<W; x+=cell){
+      ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+    }
+    for(let y=cell; y<H; y+=cell){
+      ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+
+    // threads
+    ctx.lineCap = 'round';
+    for(let i=0;i<edges.length;i++){
+      const [a,b] = edges[i];
+      const A = nodes[a], B = nodes[b];
+      const crossing = crossingEdgeSet.has(i);
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y);
+      ctx.lineTo(B.x, B.y);
+      ctx.lineWidth = crossing ? 3.5 : 2.5;
+      ctx.strokeStyle = crossing ? getCrossingStroke(i) : getCleanStroke(i);
+      ctx.stroke();
+
+      // little stitch bumps to feel like yarn
+      const dx = B.x - A.x, dy = B.y - A.y;
+      const len = Math.hypot(dx,dy);
+      const nx = -dy/len, ny = dx/len; // normal
+      const k = 12; // stitch spacing
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      for(let t=k; t<len-6; t+=k){
+        const px = A.x + dx*(t/len) + nx*2;
+        const py = A.y + dy*(t/len) + ny*2;
+        ctx.beginPath(); ctx.arc(px,py,1.6,0,Math.PI*2); ctx.stroke();
+      }
+    }
+
+    // pins (nodes)
+    for(let i=0;i<nodes.length;i++){
+      const p = nodes[i];
+      const r = NODE_R;
+      // shadow
+      ctx.beginPath();
+      ctx.arc(p.x + 1.5, p.y + 2, r + 2, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fill();
+      // yarn ball body
+      const grad = ctx.createRadialGradient(p.x - r*0.5, p.y - r*0.7, 3, p.x, p.y, r);
+      const on = (dragging && dragging.id === i) || i === hoverId;
+      grad.addColorStop(0, on ? '#ffe8ff' : '#f0e8ff');
+      grad.addColorStop(1, on ? '#b98efc' : '#b48efc');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI*2);
+      ctx.fillStyle = grad; ctx.fill();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.stroke();
+      // yarn windings
+      ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(30, 0, 60, 0.25)';
+      for(let a=0; a<Math.PI; a+=Math.PI/6){
+        const rx = r*(0.9 - 0.15*Math.cos(a));
+        const ry = r*(0.9 - 0.15*Math.sin(a));
+        ctx.beginPath();
+        ctx.ellipse(p.x, p.y, rx, ry, a, 0, Math.PI*2);
+        ctx.stroke();
+      }
+      // marker dot
+      ctx.beginPath(); ctx.arc(p.x, p.y, 2.5, 0, Math.PI*2); ctx.fillStyle = '#1b0f2e'; ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function getCrossingStroke(i){
+    // flash hint pairs
+    if (hintFlash > 0 && crossingPairs.some(([a,b]) => (a===i || b===i))){
+      return '#ffd166';
+    }
+    return getCSS('--edge-bad');
+  }
+  function getCleanStroke(i){
+    return getCSS('--edge-ok');
+  }
+  function getCSS(varName){
+    return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  }
+
+  // Interaction --------------------------------------------------------------
+  function pickNode(x,y){
+    for(let i=nodes.length-1;i>=0;i--){
+      const p = nodes[i];
+      if ((p.x - x)**2 + (p.y - y)**2 <= (NODE_R+4)**2) return i;
+    }
+    return -1;
+  }
+
+  function clampNode(p){
+    p.x = Math.max(MARGIN, Math.min(W - MARGIN, p.x));
+    p.y = Math.max(MARGIN, Math.min(H - MARGIN, p.y));
+  }
+
+  canvas.addEventListener('pointerdown', (e) =>{
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / (rect.width) * W;
+    const y = (e.clientY - rect.top) / (rect.height) * H;
+    const id = pickNode(x,y);
+    if (id !== -1){
+      const p = nodes[id];
+      dragging = { id, dx: x - p.x, dy: y - p.y };
+      canvas.setPointerCapture(e.pointerId);
+    }
+  });
+  canvas.addEventListener('pointermove', (e) =>{
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / (rect.width) * W;
+    const y = (e.clientY - rect.top) / (rect.height) * H;
+
+    if (dragging){
+      const p = nodes[dragging.id];
+      p.x = x - dragging.dx; p.y = y - dragging.dy; clampNode(p);
+      countCrossings(); draw();
+    } else {
+      hoverId = pickNode(x,y);
+      draw();
+    }
+  });
+  canvas.addEventListener('pointerup', (e) =>{
+    if (dragging){
+      moves++; movesEl.textContent = moves;
+      dragging = null;
+      canvas.releasePointerCapture(e.pointerId);
+      const left = countCrossings(); crossingsEl.textContent = left;
+      if (left === 0) win();
+      draw();
+    }
+  });
+
+  // Controls -----------------------------------------------------------------
+  btnReset.addEventListener('click', () => { shufflePositions(); });
+  btnHint.addEventListener('click', () => { doHint(); });
+  btnNext.addEventListener('click', () => { nextLevel(); });
+  btnNew.addEventListener('click', () => { startRun(true); });
+  btnCont.addEventListener('click', () => { nextLevel(); hideToast(); });
+  btnAgain.addEventListener('click', () => { replayLevel(); hideToast(); });
+
+  window.addEventListener('resize', () => { resizeCanvas(); });
+  window.addEventListener('keydown', (e) =>{
+    if (e.key === 'h' || e.key === 'H') doHint();
+    else if (e.key === 'r' || e.key === 'R') shufflePositions();
+    else if (e.key === 'n' || e.key === 'N') nextLevel();
+  });
+
+  // Game flow ----------------------------------------------------------------
+  function startRun(reset=false){
+    level = reset ? 1 : level;
+    timerStart = performance.now();
+    moves = 0; movesEl.textContent = '0';
+    levelEl.textContent = String(level);
+    generateGraph(LEVEL_SIZES[Math.min(level-1, LEVEL_SIZES.length-1)]);
+    placeNodes(LEVEL_SIZES[Math.min(level-1, LEVEL_SIZES.length-1)]);
+    const left = countCrossings(); crossingsEl.textContent = left;
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = requestAnimationFrame(tick);
+    draw();
+  }
+
+  function nextLevel(){
+    level = Math.min(level + 1, LEVEL_SIZES.length);
+    timerStart = performance.now();
+    moves = 0; movesEl.textContent = '0';
+    levelEl.textContent = String(level);
+    generateGraph(LEVEL_SIZES[level-1]);
+    placeNodes(LEVEL_SIZES[level-1]);
+    const left = countCrossings(); crossingsEl.textContent = left;
+    draw();
+  }
+
+  function replayLevel(){
+    timerStart = performance.now();
+    moves = 0; movesEl.textContent = '0';
+    generateGraph(LEVEL_SIZES[Math.min(level-1, LEVEL_SIZES.length-1)]);
+    placeNodes(LEVEL_SIZES[Math.min(level-1, LEVEL_SIZES.length-1)]);
+    const left = countCrossings(); crossingsEl.textContent = left;
+    draw();
+  }
+
+  function shufflePositions(){
+    const n = nodes.length;
+    for(let i=0;i<n;i++){
+      nodes[i].x = rnd(MARGIN, W-MARGIN);
+      nodes[i].y = rnd(MARGIN, H-MARGIN);
+    }
+    moves = 0; movesEl.textContent = '0';
+    const left = countCrossings(); crossingsEl.textContent = left;
+    draw();
+  }
+
+  function doHint(){
+    if (crossingPairs.length === 0) return;
+    hintFlash = 40; // frames
+    const anim = () => {
+      hintFlash--; draw();
+      if (hintFlash > 0) requestAnimationFrame(anim);
+    };
+    requestAnimationFrame(anim);
+  }
+
+  function win(){
+    showToast();
+  }
+
+  function showToast(){ toast.classList.add('show'); }
+  function hideToast(){ toast.classList.remove('show'); }
+
+  function tick(){
+    if (!timerStart) return;
+    const t = Math.floor((performance.now() - timerStart)/1000);
+    const mins = Math.floor(t/60), secs = t%60;
+    timeEl.textContent = `${mins}:${secs.toString().padStart(2,'0')}`;
+    rafId = requestAnimationFrame(tick);
+  }
+
+  // Kickoff
+  resizeCanvas();
+  startRun(true);
+  </script>
+</body>
+</html>

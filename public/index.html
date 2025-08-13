@@ -114,10 +114,9 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
 #chatSend{background:#334155;color:#e2e8f0;border:0;border-radius:10px;
   padding:10px 14px;font-weight:600;cursor:pointer}
 
-/* top-right utility buttons */
-.topBtn{position:fixed;top:12px;right:12px;background:#334155;color:#e2e8f0;
-  border:0;border-radius:8px;padding:8px 12px;cursor:pointer;z-index:11}
-#friendsBtn{right:92px}
+/* bottom utility bar */
+#bottomBar{position:fixed;right:12px;bottom:12px;display:flex;gap:8px;z-index:11}
+#bottomBar button{background:#334155;color:#e2e8f0;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
 
 /* side panels */
 .sidePanel{position:fixed;top:0;right:0;width:260px;height:100%;
@@ -127,6 +126,7 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
 .sidePanel.open{transform:translateX(0)}
 #friendsPanel div{padding:6px;border-bottom:1px solid #1f2a44;cursor:pointer}
 #friendsPanel div:hover{background:#1f2a44}
+#historyPanel div{padding:6px;border-bottom:1px solid #1f2a44;word-break:break-word}
 </style>
 
 <!-- Google Identity Services -->
@@ -174,9 +174,11 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
   <button id="chatSend">Send</button>
 </div>
 
-<!-- top buttons -->
-<button id="historyBtn" class="topBtn">History</button>
-<button id="friendsBtn" class="topBtn">Friends</button>
+<!-- bottom utility bar -->
+<div id="bottomBar">
+  <button id="historyBtn">History</button>
+  <button id="friendsBtn">Friends</button>
+</div>
 
 <!-- side panels -->
 <div id="historyPanel" class="sidePanel"></div>

@@ -4,7 +4,11 @@ export function initLoginGate({ onGuest, onGoogle }) {
   const guestBtn  = document.getElementById('guestBtn');
   const loginMsg  = document.getElementById('loginMsg');
 
-  guestBtn.onclick = onGuest;
+  guestBtn.onclick = () => {
+    // Hide the welcome gate when playing as guest
+    loginGate.style.display = 'none';
+    onGuest();
+  };
 
   /* global google */
   google.accounts.id.initialize({

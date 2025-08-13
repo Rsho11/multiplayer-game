@@ -24,9 +24,9 @@ const nameInput   = document.getElementById('nameInput');
 const colorHexEl  = document.getElementById('colorHex');
 const previewWrap = document.getElementById('previewWrap');
 
-const chatBar   = document.getElementById('chatBar');
-const chatInput = document.getElementById('chatInput');
-const chatSend  = document.getElementById('chatSend');
+const bottomBar   = document.getElementById('bottomBar');
+const chatInput   = document.getElementById('chatInput');
+const chatSend    = document.getElementById('chatSend');
 const historyBtn   = document.getElementById('historyBtn');
 const friendsBtn   = document.getElementById('friendsBtn');
 const historyPanel = document.getElementById('historyPanel');
@@ -41,7 +41,7 @@ function isTypingInChat(e) {
   return (
     e &&
     (e.target === chatInput ||
-      (e.target && e.target.closest && e.target.closest('#chatBar')))
+      (e.target && e.target.closest && e.target.closest('#bottomBar')))
   );
 }
 
@@ -151,26 +151,21 @@ const activeBubbles = [];
 
 // -- Materials / tint helpers --------------------------------------------
 function tintMaterial(m, color) {
-  // If the material can’t be tinted, swap in a basic one
-  if (!m || !('color' in m)) {
-    const mat = new THREE.MeshStandardMaterial({
+  let mat = m && m.isMaterial ? m.clone() : null;
+  if (!mat || !mat.color) {
+    mat = new THREE.MeshStandardMaterial({
       color: color.clone(),
       metalness: 0.05,
       roughness: 0.85,
     });
-    mat.needsUpdate = true;
-    return mat;
+  } else {
+    if (mat.map) mat.map = null;
+    if (mat.vertexColors) mat.vertexColors = false;
+    mat.color.copy(color);
+    if (mat.emissive) mat.emissive.copy(color).multiplyScalar(0.12);
   }
-
-  // Strip textures / vertex colors for flat tint
-  if (m.map) m.map = null;
-  if (m.vertexColors) m.vertexColors = false;
-
-  if (m.color) m.color.copy(color);
-  if (m.emissive) m.emissive.copy(color).multiplyScalar(0.12);
-
-  m.needsUpdate = true;
-  return m;
+  mat.needsUpdate = true;
+  return mat;
 }
 
 function applyColor(root, hex) {
@@ -814,7 +809,7 @@ function showCharCreator(idToken = null) {
 
     overlay.classList.add('hidden');
     disposePreview();
-    chatBar.classList.remove('hidden');
+    bottomBar.classList.remove('hidden');
     playAmbientSound();
     setTimeout(() => chatInput.focus(), 50);
 

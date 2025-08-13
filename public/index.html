@@ -94,20 +94,14 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
   font-weight:600;cursor:pointer}
 #startBtn:disabled{opacity:.6;cursor:not-allowed}
 
-/* chat bar */
-#chatBar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
-  display:flex;gap:8px;align-items:center;z-index:9;
-  background:rgba(9,13,24,.7);border:1px solid #1f2a44;padding:8px;border-radius:12px;
-  backdrop-filter:blur(6px);width:min(640px,92vw)}
-#chatBar.hidden{display:none}
-#chatInput{flex:1;background:#0b1020;border:1px solid #1f2a44;color:#e2e8f0;
-  padding:10px 12px;border-radius:10px;outline:none}
-#chatSend{background:#334155;color:#e2e8f0;border:0;border-radius:10px;
-  padding:10px 14px;font-weight:600;cursor:pointer}
-
-/* bottom utility bar */
-#bottomBar{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:flex-end;gap:8px;z-index:11;padding:8px 12px;background:rgba(9,13,24,.7);border-top:1px solid #1f2a44;backdrop-filter:blur(6px)}
-#bottomBar button{background:#334155;color:#e2e8f0;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
+/* bottom utility bar + chat */
+#bottomBar{position:fixed;left:0;right:0;bottom:0;display:flex;align-items:center;gap:8px;z-index:11;padding:8px 12px;background:rgba(9,13,24,.7);border-top:1px solid #1f2a44;backdrop-filter:blur(6px)}
+#bottomBar.hidden{display:none}
+#chatWrap{flex:1;display:flex;gap:8px;max-width:640px;width:100%;margin:0 auto}
+#chatInput{flex:1;background:#0b1020;border:1px solid #1f2a44;color:#e2e8f0;padding:10px 12px;border-radius:10px;outline:none}
+#chatSend{background:#334155;color:#e2e8f0;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+#bottomButtons{display:flex;gap:8px}
+#bottomButtons button{background:#334155;color:#e2e8f0;border:0;border-radius:8px;padding:8px 12px;cursor:pointer}
 #logoutBtn{display:none;background:#dc2626;color:#fff}
 
 /* side panels */
@@ -160,17 +154,17 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
   </div>
 </div>
 
-<!-- =================== CHAT BAR =================== -->
-<div id="chatBar" class="hidden">
-  <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off">
-  <button id="chatSend">Send</button>
-</div>
-
 <!-- bottom utility bar -->
-<div id="bottomBar">
-  <button id="historyBtn">History</button>
-  <button id="friendsBtn">Friends</button>
-  <button id="logoutBtn">Logout</button>
+<div id="bottomBar" class="hidden">
+  <div id="chatWrap">
+    <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off">
+    <button id="chatSend">Send</button>
+  </div>
+  <div id="bottomButtons">
+    <button id="historyBtn">History</button>
+    <button id="friendsBtn">Friends</button>
+    <button id="logoutBtn">Logout</button>
+  </div>
 </div>
 
 <!-- side panels -->

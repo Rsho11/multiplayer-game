@@ -33,6 +33,8 @@ const historyPanel = document.getElementById('historyPanel');
 const friendsPanel = document.getElementById('friendsPanel');
 const friendsList  = document.getElementById('friendsList');
 const logoutBtn    = document.getElementById('logoutBtn');
+const knitOverlay  = document.getElementById('knitOverlay');
+const knitClose    = document.getElementById('knitClose');
 
 const socket = window.io();
 
@@ -41,9 +43,21 @@ function isTypingInChat(e) {
   return (
     e &&
     (e.target === chatInput ||
-      (e.target && e.target.closest && e.target.closest('#bottomBar')))
+      (e.target &&
+        e.target.closest &&
+        (e.target.closest('#bottomBar') || e.target.closest('#knitOverlay'))))
   );
 }
+
+function openKnitGame() {
+  knitOverlay.classList.remove('hidden');
+}
+
+function closeKnitGame() {
+  knitOverlay.classList.add('hidden');
+}
+
+knitClose.addEventListener('click', closeKnitGame);
 
 // ------------------------------------------------------------------------
 // THREE.js main scene
@@ -86,6 +100,28 @@ envLoader.load('/models/WaitingRoom.fbx', (fbx) => {
     }
   });
   if (!floor) floor = fbx;
+  scene.add(fbx);
+});
+
+// Knit minigame character --------------------------------------------------
+let knitModel = null;
+const miscLoader = new FBXLoader();
+miscLoader.load('/models/Knit.fbx', (fbx) => {
+  const box = new THREE.Box3().setFromObject(fbx);
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  const s = 1.7 / Math.max(size.y || 0.001, 0.001);
+  fbx.scale.setScalar(s);
+  const scaled = new THREE.Box3().setFromObject(fbx);
+  fbx.position.y -= scaled.min.y;
+  fbx.traverse((c) => {
+    if (c.isMesh) {
+      c.castShadow = true;
+      c.receiveShadow = true;
+    }
+  });
+  fbx.position.set(2, 0, 2);
+  knitModel = fbx;
   scene.add(fbx);
 });
 
@@ -438,6 +474,13 @@ function spawnPlayer(id, pos, name, color, isLocal = false) {
       mouse.x = (e.clientX / innerWidth) * 2 - 1;
       mouse.y = -(e.clientY / innerHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
+      if (knitModel) {
+        const khit = raycaster.intersectObject(knitModel, true);
+        if (khit.length) {
+          openKnitGame();
+          return;
+        }
+      }
 
       const objs = Array.from(players.values());
       const phit = raycaster.intersectObjects(objs, true);

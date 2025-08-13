@@ -113,6 +113,20 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
   padding:10px 12px;border-radius:10px;outline:none}
 #chatSend{background:#334155;color:#e2e8f0;border:0;border-radius:10px;
   padding:10px 14px;font-weight:600;cursor:pointer}
+
+/* top-right utility buttons */
+.topBtn{position:fixed;top:12px;right:12px;background:#334155;color:#e2e8f0;
+  border:0;border-radius:8px;padding:8px 12px;cursor:pointer;z-index:11}
+#friendsBtn{right:92px}
+
+/* side panels */
+.sidePanel{position:fixed;top:0;right:0;width:260px;height:100%;
+  background:rgba(9,13,24,.95);border-left:1px solid #1f2a44;padding:12px;
+  overflow-y:auto;transform:translateX(100%);transition:transform .25s;
+  z-index:10;color:#e2e8f0}
+.sidePanel.open{transform:translateX(0)}
+#friendsPanel div{padding:6px;border-bottom:1px solid #1f2a44;cursor:pointer}
+#friendsPanel div:hover{background:#1f2a44}
 </style>
 
 <!-- Google Identity Services -->
@@ -159,6 +173,14 @@ button.guest{background:#10b981;border:0;color:#fff;font-weight:600;
   <input id="chatInput" type="text" placeholder="Type a message…" maxlength="160" autocomplete="off">
   <button id="chatSend">Send</button>
 </div>
+
+<!-- top buttons -->
+<button id="historyBtn" class="topBtn">History</button>
+<button id="friendsBtn" class="topBtn">Friends</button>
+
+<!-- side panels -->
+<div id="historyPanel" class="sidePanel"></div>
+<div id="friendsPanel" class="sidePanel"><h4>Friends</h4><div id="friendsList"></div></div>
 
 <!-- ======== dust motes generator ======== -->
 <script>
